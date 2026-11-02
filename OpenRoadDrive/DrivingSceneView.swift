@@ -62,13 +62,13 @@ struct DrivingSceneView: UIViewRepresentable {
 
             for x: Float in [-0.91, 0.91] {
                 for z: Float in [-1.28, 1.28] {
-                    let wheel = ModelEntity(mesh: .generateCylinder(height: 0.24, radius: 0.37), materials: [rubber])
+                    let wheel = ModelEntity(mesh: .generateSphere(radius: 0.37), materials: [rubber])
                     wheel.position = [x, 0.42, z]
-                    wheel.orientation = simd_quatf(angle: .pi / 2, axis: [0, 0, 1])
+                    wheel.scale = [0.62, 1.0, 1.0]
                     car.addChild(wheel)
-                    let hub = ModelEntity(mesh: .generateCylinder(height: 0.255, radius: 0.15), materials: [trim])
+                    let hub = ModelEntity(mesh: .generateSphere(radius: 0.15), materials: [trim])
                     hub.position = [x * 1.01, 0.42, z]
-                    hub.orientation = wheel.orientation
+                    hub.scale = [0.62, 1.0, 1.0]
                     car.addChild(hub)
                 }
             }
@@ -83,9 +83,9 @@ struct DrivingSceneView: UIViewRepresentable {
             dashboard.position = [0, 0.98, 0.58]
             car.addChild(dashboard)
 
-            let steering = ModelEntity(mesh: .generateCylinder(height: 0.07, radius: 0.31), materials: [rubber])
+            let steering = ModelEntity(mesh: .generateSphere(radius: 0.31), materials: [rubber])
             steering.position = [0, 1.18, 0.35]
-            steering.orientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+            steering.scale = [1.0, 0.12, 1.0]
             car.addChild(steering)
 
             anchor.addChild(car)
