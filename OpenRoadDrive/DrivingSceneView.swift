@@ -13,6 +13,7 @@ struct DrivingSceneView: UIViewRepresentable {
         view.backgroundColor = UIColor(red: 0.43, green: 0.65, blue: 0.82, alpha: 1)
         view.isPlaying = true
         view.rendersContinuously = true
+        view.showsStatistics = false
         view.preferredFramesPerSecond = 30
         view.antialiasingMode = .none
         view.autoenablesDefaultLighting = false
