@@ -17,6 +17,8 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var speedKPH = 0.0
     @Published private(set) var distanceMeters = 0.0
     @Published private(set) var roads: [RoadVisual] = []
+    @Published private(set) var terrain: TerrainVisual?
+    @Published private(set) var elevationMeters: Float = 0
     @Published private(set) var roadStatus = "LOADING LOCAL ROADS"
     @Published private(set) var isAccelerating = false
     @Published private(set) var isBraking = false
@@ -183,9 +185,10 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
         roadReady = false
         do {
             let fetched = try await RoadNetwork.fetch(near: position)
-            roadEdges = fetched
+            roadEdges = fetched.edges
             origin = position
-            roads = RoadNetwork.visuals(fetched, origin: origin)
+            roads = fetched.roads
+            terrain = fetched.terrain
             coordinate = position
             guard snapToNearestRoad() else {
                 roadStatus = "NO DRIVABLE ROAD NEARBY"
@@ -300,6 +303,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
             longitude: start.longitude + (end.longitude - start.longitude) * t
         )
         heading = Self.bearing(from: start, to: end)
+        elevationMeters = edge.startElevation + Float(t) * (edge.endElevation - edge.startElevation)
     }
 
     private static func bearing(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> Double {
