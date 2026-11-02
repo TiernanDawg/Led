@@ -17,6 +17,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var speedKPH = 0.0
     @Published private(set) var distanceMeters = 0.0
     @Published private(set) var roads: [RoadVisual] = []
+    @Published private(set) var worldRevision = 0
     @Published private(set) var terrain: TerrainVisual?
     @Published private(set) var elevationMeters: Float = 0
     @Published private(set) var roadStatus = "LOADING LOCAL ROADS"
@@ -38,6 +39,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     private var turnRequest = 0.0
     private var throttle = false
     private var brake = false
+    private var isLoadingRoads = false
 
     var worldPosition: (x: Float, z: Float) {
         RoadNetwork.localPosition(coordinate, origin: origin)
@@ -181,7 +183,10 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     private func loadRoads(near position: CLLocationCoordinate2D) async {
-        roadStatus = "DOWNLOADING ROAD DATA"
+        guard !isLoadingRoads else { return }
+        isLoadingRoads = true
+        defer { isLoadingRoads = false }
+        roadStatus = "STREAMING WORLD DATA"
         roadReady = false
         do {
             let fetched = try await RoadNetwork.fetch(near: position)
@@ -189,6 +194,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
             origin = position
             roads = fetched.roads
             terrain = fetched.terrain
+            worldRevision &+= 1
             coordinate = position
             guard snapToNearestRoad() else {
                 roadStatus = "NO DRIVABLE ROAD NEARBY"
@@ -240,7 +246,12 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     private func tick(deltaTime dt: Double) {
-        guard roadReady, activeEdge >= 0 else { speedKPH = 0; return }
+        guard roadReady, activeEdge >= 0 else { return }
+        if Self.distance(coordinate, origin) > 520, !isLoadingRoads {
+            let streamingCenter = coordinate
+            Task { await loadRoads(near: streamingCenter) }
+            return
+        }
         let edge = roadEdges[activeEdge]
         let speed = speedKPH / 3.6
         let acceleration: Double
