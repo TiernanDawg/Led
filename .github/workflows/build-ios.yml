@@ -1,4 +1,4 @@
-name: Build iOS IPA # build 3D road-constrained driving update
+name: Build iOS IPA # build 3D road physics compatibility fix
 
 on:
   workflow_dispatch:
