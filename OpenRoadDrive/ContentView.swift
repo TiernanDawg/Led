@@ -198,7 +198,7 @@ struct ContentView: View {
             }
         }
         .padding(11)
-        .background(.ultraThinMaterial.opacity(0.95), in: RoundedRectangle(cornerRadius: 23))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 23))
         .overlay(RoundedRectangle(cornerRadius: 23).stroke(.white.opacity(0.15)))
     }
 
