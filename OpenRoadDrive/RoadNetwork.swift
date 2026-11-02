@@ -138,7 +138,7 @@ enum RoadNetwork {
 
         var elevations = [Float](repeating: 0, count: coordinates.count)
         do {
-            let batchSize = 80
+            let batchSize = 100
             for start in stride(from: 0, to: coordinates.count, by: batchSize) {
                 let end = min(start + batchSize, coordinates.count)
                 let batch = Array(coordinates[start..<end])
@@ -151,12 +151,11 @@ enum RoadNetwork {
                 request.timeoutInterval = 12
                 let (data, response) = try await URLSession.shared.data(for: request)
                 guard (response as? HTTPURLResponse)?.statusCode == 200,
-                      let records = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                      records.count == batch.count else { throw RoadNetworkError.invalidElevation }
-                for (offset, record) in records.enumerated() {
-                    if let value = record["elevation"] as? Double {
-                        elevations[start + offset] = Float(value)
-                    }
+                      let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let values = payload["elevation"] as? [NSNumber],
+                      values.count == batch.count else { throw RoadNetworkError.invalidElevation }
+                for (offset, value) in values.enumerated() {
+                    elevations[start + offset] = value.floatValue
                 }
             }
         } catch {
