@@ -1,338 +1,268 @@
 import SwiftUI
+import MapKit
 
 struct ContentView: View {
-    @StateObject private var drive = DriveSession()
-    @State private var showLocationSearch = false
-    @State private var locationQuery = ""
+    @StateObject private var nav = NavigationSession()
+    @State private var showingSearch = false
+    @State private var query = ""
 
-    private let accent = Color(red: 0.12, green: 0.82, blue: 0.98)
-    private let panel = Color.black.opacity(0.66)
+    private let themes = MapTheme.allCases
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                DrivingSceneView(drive: drive)
-                    .ignoresSafeArea()
+        ZStack {
+            MiniMapView(session: nav)
+                .ignoresSafeArea()
 
-                if !drive.roadReady {
-                    worldLoadingOverlay
+            VStack(spacing: 12) {
+                header
+                Spacer()
+                if let route = nav.route {
+                    routeBanner(route)
                 }
-
-                VStack(spacing: 0) {
-                    topHUD
-                    Spacer(minLength: 10)
-                    if drive.cameraMode == .cockpit {
-                        cockpitHUD
-                    }
-                    bottomHUD
-                }
-                .padding(.top, geometry.safeAreaInsets.top + 7)
-                .padding(.bottom, max(geometry.safeAreaInsets.bottom, 8) + 7)
-                .padding(.horizontal, 13)
+                themePicker
+                bottomPanel
             }
-            .background(Color.black)
-            .ignoresSafeArea()
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
-        .preferredColorScheme(.dark)
-        .onAppear { drive.start() }
-        .onDisappear { drive.stop() }
-        .sheet(isPresented: $showLocationSearch) {
+        .background(Color.black)
+        .sheet(isPresented: $showingSearch) {
             NavigationStack {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Choose any real-world location")
-                        .font(.headline)
-                    TextField("City, landmark, or address", text: $locationQuery)
-                        .textFieldStyle(.roundedBorder)
-                        .submitLabel(.search)
-                        .onSubmit {
-                            drive.searchLocation(locationQuery)
-                            showLocationSearch = false
-                        }
-                    Button {
-                        drive.searchLocation(locationQuery)
-                        showLocationSearch = false
-                    } label: {
-                        Text("LOAD WORLD").fontWeight(.bold).frame(maxWidth: .infinity)
+                VStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                        TextField("Search places or addresses", text: $query)
+                            .submitLabel(.search)
+                            .onSubmit { nav.search(query); showingSearch = false }
                     }
-                    .buttonStyle(.borderedProminent)
-                    Text("Roads and terrain load around the selected location. An internet connection is required.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    .padding(14)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+                    Button("Search") { nav.search(query); showingSearch = false }
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity)
+                    if nav.isSearching { ProgressView("Searching…") }
+                    if let error = nav.error { Text(error).font(.footnote).foregroundStyle(.red) }
+                    if !nav.results.isEmpty {
+                        List(nav.results, id: \.self) { item in
+                            Button {
+                                nav.select(item)
+                                showingSearch = false
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.name ?? "Place").foregroundStyle(.primary)
+                                    Text(item.placemark.title ?? "").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .listStyle(.plain)
+                    }
                     Spacer()
                 }
                 .padding()
-                .navigationTitle("Go to")
+                .navigationTitle("Find a destination")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") { showLocationSearch = false }
-                    }
-                }
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { showingSearch = false } } }
             }
-            .presentationDetents([.medium])
+            .presentationDetents([.medium, .large])
         }
+        .onAppear { nav.start() }
+        .onDisappear { nav.stop() }
     }
 
-    private var worldLoadingOverlay: some View {
-        VStack(spacing: 11) {
-            if drive.isLoadingWorld {
-                ProgressView()
-                    .controlSize(.large)
-                    .tint(accent)
-                Text("BUILDING YOUR WORLD")
-                    .font(.system(size: 12, weight: .black, design: .rounded))
-                    .tracking(1.1)
-            } else {
-                Image(systemName: "wifi.exclamationmark")
-                    .font(.system(size: 25, weight: .semibold))
-                    .foregroundStyle(.orange)
-                Text("WORLD NOT READY")
-                    .font(.system(size: 12, weight: .black, design: .rounded))
-                    .tracking(1.1)
-                Button("TRY AGAIN") { drive.retryWorldLoad() }
-                    .font(.system(size: 11, weight: .black))
-                    .buttonStyle(.borderedProminent)
-                    .tint(accent)
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("MiniMap").font(.system(size: 23, weight: .black, design: .rounded))
+                Text(nav.status).font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.7))
             }
-            Text(drive.roadStatus)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.72))
-        }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 18)
-        .frame(maxWidth: 270)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.18)))
-        .shadow(color: .black.opacity(0.2), radius: 18, y: 8)
-    }
-
-    private var topHUD: some View {
-        HStack(alignment: .top, spacing: 9) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Image(systemName: "flag.checkered")
-                        .foregroundStyle(accent)
-                    Text("OPENROAD")
-                        .tracking(2.2)
-                        .font(.system(size: 13, weight: .black, design: .rounded))
-                }
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(drive.roadReady ? Color.green : Color.orange)
-                        .frame(width: 6, height: 6)
-                    Text(drive.roadStatus)
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-                .foregroundStyle(.white.opacity(0.78))
+            Spacer()
+            Button { showingSearch = true } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 18, weight: .bold))
+                    .frame(width: 48, height: 48)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15))
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(panel, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.12)))
-
-            VStack(spacing: 5) {
-                Image(systemName: drive.controllerConnected ? "gamecontroller.fill" : "gamecontroller")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(drive.controllerConnected ? accent : .white.opacity(0.55))
-                Text(drive.controllerConnected ? "XBOX" : "PAD")
-                    .font(.system(size: 8, weight: .black))
-                    .tracking(0.8)
+            Button { nav.centerOnUser() } label: {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(width: 48, height: 48)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15))
             }
-            .frame(width: 51, height: 55)
-            .background(panel, in: RoundedRectangle(cornerRadius: 15))
-            .overlay(RoundedRectangle(cornerRadius: 15).stroke(drive.controllerConnected ? accent.opacity(0.55) : .white.opacity(0.12)))
-
-            Button { showLocationSearch = true } label: {
-                VStack(spacing: 5) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 17, weight: .semibold))
-                    Text("GO TO")
-                        .font(.system(size: 8, weight: .black))
-                        .tracking(0.6)
-                }
-                .frame(width: 55, height: 55)
-                .background(panel, in: RoundedRectangle(cornerRadius: 15))
-                .overlay(RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.12)))
-            }
-            .buttonStyle(.plain)
-
-            Button { drive.changeCamera() } label: {
-                VStack(spacing: 5) {
-                    Image(systemName: drive.cameraMode == .follow ? "car.side.fill" : "view.3d")
-                        .font(.system(size: 17, weight: .semibold))
-                    Text(drive.cameraMode == .follow ? "CHASE" : "COCKPIT")
-                        .font(.system(size: 8, weight: .black))
-                        .tracking(0.6)
-                }
-                .frame(width: 60, height: 55)
-                .background(panel, in: RoundedRectangle(cornerRadius: 15))
-                .overlay(RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.12)))
-            }
-            .buttonStyle(.plain)
         }
         .foregroundStyle(.white)
+        .padding(12)
+        .background(.black.opacity(0.68), in: RoundedRectangle(cornerRadius: 20))
     }
 
-    private var speedHUD: some View {
-        HStack(spacing: 13) {
-            ZStack {
-                Circle()
-                    .stroke(.white.opacity(0.13), lineWidth: 5)
-                Circle()
-                    .trim(from: 0, to: CGFloat(min(drive.speedKPH / 220, 1)))
-                    .stroke(accent, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                VStack(spacing: 0) {
-                    Text(String(format: "%.0f", drive.speedKPH))
-                        .font(.system(size: 25, weight: .black, design: .rounded).monospacedDigit())
-                        .contentTransition(.numericText())
-                    Text("KM/H")
-                        .font(.system(size: 7, weight: .black))
-                        .tracking(1)
-                        .foregroundStyle(.white.opacity(0.65))
+    private var themePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("MAP WORLDS").font(.system(size: 10, weight: .black)).tracking(1.4)
+                Spacer()
+                Text(nav.theme.subtitle).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.65))
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(themes) { theme in
+                        Button { nav.theme = theme } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Image(systemName: theme.symbol).font(.system(size: 18, weight: .bold))
+                                Text(theme.title).font(.system(size: 10, weight: .black))
+                            }
+                            .foregroundStyle(nav.theme == theme ? .black : .white)
+                            .frame(width: 83, height: 62)
+                            .background(nav.theme == theme ? theme.accent : Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 13))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
-            .frame(width: 60, height: 60)
-
-            VStack(alignment: .leading, spacing: 7) {
-                metricLine("DISTANCE", value: String(format: "%.2f KM", drive.distanceMeters / 1000))
-                metricLine("HEADING", value: String(format: "%03.0f°", drive.heading))
-                metricLine("SURFACE", value: drive.roadReady ? (drive.isOnRoad ? "ASPHALT" : "OFF ROAD") : "LOADING")
-            }
-            Spacer(minLength: 0)
         }
         .padding(12)
-        .background(panel, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.13)))
+        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18))
     }
 
-    private func metricLine(_ title: String, value: String) -> some View {
-        HStack(spacing: 10) {
-            Text(title)
-                .font(.system(size: 8, weight: .black))
-                .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.55))
-            Spacer(minLength: 4)
-            Text(value)
-                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(.white)
-        }
-    }
-
-    private var cockpitHUD: some View {
-        HStack {
-            Text("COCKPIT VIEW")
-                .font(.system(size: 9, weight: .black))
-                .tracking(1.2)
+    private var bottomPanel: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(nav.route == nil ? "READY TO EXPLORE" : "ROUTE ACTIVE")
+                    .font(.system(size: 9, weight: .black)).tracking(1)
+                    .foregroundStyle(.white.opacity(0.65))
+                Text(nav.route.map { String(format: "%.1f mi · %d min", $0.distance / 1609.344, Int($0.expectedTravelTime / 60)) } ?? "Search anywhere to get directions")
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+            }
             Spacer()
-            Text("© OpenStreetMap contributors")
-                .font(.system(size: 8, weight: .medium))
-                .foregroundStyle(.white.opacity(0.65))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(panel, in: Capsule())
-        .padding(.bottom, 9)
-    }
-
-    private var bottomHUD: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                speedHUD
-                Button { drive.enableGPS() } label: {
-                    VStack(spacing: 6) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 17, weight: .bold))
-                        Text("GPS")
-                            .font(.system(size: 8, weight: .black))
-                            .tracking(0.8)
-                    }
-                    .frame(width: 52, height: 76)
-                    .background(panel, in: RoundedRectangle(cornerRadius: 17))
-                    .overlay(RoundedRectangle(cornerRadius: 17).stroke(.white.opacity(0.13)))
-                }
-                .buttonStyle(.plain)
-            }
-
-            HStack(spacing: 9) {
-                steeringButton("arrow.left", label: "LEFT", direction: -1)
-                steeringButton("arrow.right", label: "RIGHT", direction: 1)
-                Spacer(minLength: 1)
-                actionButton("BRAKE", symbol: "brake.warning", active: drive.isBraking, color: .red) { pressed in
-                    drive.setBrake(pressed)
-                }
-                actionButton("DRIVE", symbol: "arrow.up", active: drive.isAccelerating, color: accent) { pressed in
-                    drive.setThrottle(pressed)
-                }
-                .disabled(!drive.roadReady)
-                .opacity(drive.roadReady ? 1 : 0.45)
-            }
-
-            Text("© OpenStreetMap · Elevation: Copernicus DEM")
-                .font(.system(size: 7, weight: .medium))
-                .foregroundStyle(.white.opacity(0.48))
-                .frame(maxWidth: .infinity)
-
-            if drive.controllerConnected {
-                Text("XBOX: RT ACCELERATE  ·  LT BRAKE  ·  LEFT STICK STEER  ·  Y CAMERA")
-                    .font(.system(size: 8, weight: .bold, design: .rounded))
-                    .tracking(0.35)
-                    .foregroundStyle(accent)
-                    .frame(maxWidth: .infinity)
+            if nav.route != nil {
+                Button("END") { nav.clearRoute() }
+                    .font(.system(size: 11, weight: .black))
+                    .padding(.horizontal, 15).padding(.vertical, 11)
+                    .background(.red.opacity(0.85), in: Capsule())
             } else {
-                Text("CONNECT AN XBOX / BLUETOOTH GAME CONTROLLER")
-                    .font(.system(size: 8, weight: .bold, design: .rounded))
-                    .tracking(0.45)
-                    .foregroundStyle(.white.opacity(0.52))
-                    .frame(maxWidth: .infinity)
+                Button("SEARCH") { showingSearch = true }
+                    .font(.system(size: 11, weight: .black))
+                    .padding(.horizontal, 15).padding(.vertical, 11)
+                    .background(nav.theme.accent, in: Capsule())
+                    .foregroundStyle(.black)
             }
         }
-        .padding(9)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 23))
-        .overlay(RoundedRectangle(cornerRadius: 23).stroke(.white.opacity(0.15)))
+        .foregroundStyle(.white)
+        .padding(14)
+        .background(.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 18))
     }
 
-    private func steeringButton(_ symbol: String, label: String, direction: Double) -> some View {
-        Button {} label: {
-            VStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 19, weight: .black))
-                Text(label).font(.system(size: 8, weight: .black)).tracking(0.8)
+    private func routeBanner(_ route: MKRoute) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill").font(.title2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Route preview").font(.system(size: 12, weight: .black))
+                Text("\(route.name.isEmpty ? "Fastest available route" : route.name) · \(String(format: "%.1f mi", route.distance / 1609.344))")
+                    .font(.system(size: 10, weight: .medium)).lineLimit(1)
             }
-            .foregroundStyle(.white)
-            .frame(width: 50, height: 58)
-            .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.17)))
+            Spacer()
         }
-        .buttonStyle(.plain)
-        .onLongPressGesture(minimumDuration: 0, maximumDistance: 100,
-                            pressing: { pressed in drive.steer(pressed ? direction : 0) },
-                            perform: {})
-        .disabled(!drive.roadReady)
-        .opacity(drive.roadReady ? 1 : 0.4)
-    }
-
-    private func actionButton(_ title: String, symbol: String, active: Bool,
-                              color: Color, action: @escaping (Bool) -> Void) -> some View {
-        Button {} label: {
-            VStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 19, weight: .black))
-                Text(title).font(.system(size: 8, weight: .black)).tracking(0.8)
-            }
-            .foregroundStyle(active ? .black : .white)
-            .frame(width: 62, height: 58)
-            .background(active ? color : .white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(active ? color : .white.opacity(0.17)))
-        }
-        .buttonStyle(.plain)
-        .onLongPressGesture(minimumDuration: 0, maximumDistance: 100,
-                            pressing: action, perform: {})
+        .foregroundStyle(.white)
+        .padding(13)
+        .background(.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
-#Preview {
-    ContentView()
+enum MapTheme: String, CaseIterable, Identifiable {
+    case losAngeles, gotham, voxel, valley
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .losAngeles: "SUNSET CITY"
+        case .gotham: "GOTHAM"
+        case .voxel: "VOXEL"
+        case .valley: "PIXEL VALLEY"
+        }
+    }
+    var subtitle: String {
+        switch self {
+        case .losAngeles: "Cinematic urban"
+        case .gotham: "Dark city night"
+        case .voxel: "Block-world look"
+        case .valley: "Cozy countryside"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .losAngeles: "sun.max.fill"
+        case .gotham: "moon.stars.fill"
+        case .voxel: "cube.fill"
+        case .valley: "leaf.fill"
+        }
+    }
+    var accent: Color {
+        switch self {
+        case .losAngeles: Color(red: 1, green: 0.65, blue: 0.28)
+        case .gotham: Color(red: 0.38, green: 0.68, blue: 0.78)
+        case .voxel: Color(red: 0.46, green: 0.82, blue: 0.40)
+        case .valley: Color(red: 0.94, green: 0.72, blue: 0.43)
+        }
+    }
+    var mapType: MKMapType {
+        switch self {
+        case .losAngeles: .hybrid
+        case .gotham: .mutedStandard
+        case .voxel: .satellite
+        case .valley: .standard
+        }
+    }
+}
+
+struct MiniMapView: UIViewRepresentable {
+    @ObservedObject var session: NavigationSession
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView()
+        map.delegate = context.coordinator
+        map.showsUserLocation = true
+        map.userTrackingMode = .follow
+        map.isPitchEnabled = true
+        map.isRotateEnabled = true
+        map.pointOfInterestFilter = .includingAll
+        map.camera.pitch = 58
+        map.camera.altitude = 1100
+        return map
+    }
+    func updateUIView(_ map: MKMapView, context: Context) {
+        map.mapType = session.theme.mapType
+        if let route = session.route, context.coordinator.routeID != ObjectIdentifier(route) {
+            map.removeOverlays(map.overlays)
+            map.addOverlay(route.polyline)
+            context.coordinator.routeID = ObjectIdentifier(route)
+            map.setVisibleMapRect(route.polyline.boundingMapRect, edgePadding: UIEdgeInsets(top: 160, left: 45, bottom: 260, right: 45), animated: true)
+        } else if session.route == nil && context.coordinator.routeID != nil {
+            map.removeOverlays(map.overlays)
+            context.coordinator.routeID = nil
+        }
+        if context.coordinator.lastTheme != session.theme {
+            context.coordinator.lastTheme = session.theme
+            map.camera.pitch = session.theme == .voxel ? 68 : 58
+        }
+        if let center = session.pendingCenter {
+            map.setCenter(center, animated: true)
+            map.camera.pitch = 58
+            map.camera.altitude = 1100
+            session.pendingCenter = nil
+        }
+    }
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: MiniMapView
+        var routeID: ObjectIdentifier?
+        var lastTheme: MapTheme?
+        init(_ parent: MiniMapView) { self.parent = parent }
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
+            let renderer = MKPolylineRenderer(polyline: line)
+            renderer.strokeColor = UIColor(parent.session.theme.accent)
+            renderer.lineWidth = 7
+            renderer.lineCap = .round
+            renderer.lineJoin = .round
+            return renderer
+        }
+    }
 }
