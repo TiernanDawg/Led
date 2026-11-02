@@ -303,7 +303,9 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
             longitude: start.longitude + (end.longitude - start.longitude) * t
         )
         heading = Self.bearing(from: start, to: end)
-        elevationMeters = edge.startElevation + Float(t) * (edge.endElevation - edge.startElevation)
+        let startElevation = forward ? edge.startElevation : edge.endElevation
+        let endElevation = forward ? edge.endElevation : edge.startElevation
+        elevationMeters = startElevation + Float(t) * (endElevation - startElevation)
     }
 
     private static func bearing(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> Double {
