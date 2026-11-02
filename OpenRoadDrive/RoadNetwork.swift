@@ -44,21 +44,36 @@ enum RoadNetworkError: Error {
 }
 
 enum RoadNetwork {
-    private static let terrainSide = 17
+    private static let terrainSide = 9
     private static let terrainRadius = 1_100.0
 
     static func fetch(near center: CLLocationCoordinate2D) async throws -> RoadData {
         let query = "[out:json][timeout:25];way(around:1100,\(center.latitude),\(center.longitude))[highway~\"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|service|track|road)$\"][area!=yes];out geom;"
         var components = URLComponents(string: "https://overpass-api.de/api/interpreter")!
         components.queryItems = [URLQueryItem(name: "data", value: query)]
-        var request = URLRequest(url: components.url!)
-        request.timeoutInterval = 35
-        request.setValue("OpenRoadDrive/0.3 (iOS; OSM road graph)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
-              let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let elements = root["elements"] as? [[String: Any]] else {
-            throw RoadNetworkError.invalidResponse
+        let endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://overpass.nchc.org.tw/api/interpreter"
+        ]
+        var elements: [[String: Any]] = []
+        for endpoint in endpoints {
+            guard var endpointComponents = URLComponents(string: endpoint) else { continue }
+            endpointComponents.queryItems = [URLQueryItem(name: "data", value: query)]
+            guard let url = endpointComponents.url else { continue }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 16
+            request.setValue("OpenRoadDrive/0.4 (iOS; OSM road graph)", forHTTPHeaderField: "User-Agent")
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200,
+                      let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let returnedElements = root["elements"] as? [[String: Any]] else { continue }
+                elements = returnedElements
+                break
+            } catch {
+                continue
+            }
         }
 
         var edges: [RoadEdge] = []
@@ -86,8 +101,6 @@ enum RoadNetwork {
                 }
             }
         }
-
-        guard !edges.isEmpty else { throw RoadNetworkError.noRoadsFound }
 
         let terrain = await fetchTerrain(near: center)
         let elevatedEdges = edges.map { edge -> RoadEdge in
@@ -148,7 +161,7 @@ enum RoadNetwork {
                     URLQueryItem(name: "longitude", value: batch.map { String($0.1) }.joined(separator: ","))
                 ]
                 var request = URLRequest(url: url.url!)
-                request.timeoutInterval = 12
+                request.timeoutInterval = 9
                 let (data, response) = try await URLSession.shared.data(for: request)
                 guard (response as? HTTPURLResponse)?.statusCode == 200,
                       let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
