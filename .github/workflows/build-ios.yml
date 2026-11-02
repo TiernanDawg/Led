@@ -1,0 +1,69 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unsigned iOS IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Resolve Swift packages
+        run: xcodebuild -resolvePackageDependencies -project OpenRoadDrive.xcodeproj -scheme OpenRoadDrive
+
+      - name: Build for iOS device
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project OpenRoadDrive.xcodeproj \
+            -scheme OpenRoadDrive \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee build.log
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$PWD/build/Build/Products/Release-iphoneos/OpenRoadDrive.app"
+          test -d "$APP_PATH"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
+          rm -rf Payload OpenRoadDrive.ipa
+          mkdir -p Payload
+          ditto "$APP_PATH" Payload/OpenRoadDrive.app
+          ditto -c -k --sequesterRsrc --keepParent Payload OpenRoadDrive.ipa
+          test -s OpenRoadDrive.ipa
+          unzip -l OpenRoadDrive.ipa | grep 'Payload/OpenRoadDrive.app/Info.plist'
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenRoadDrive-unsigned-ipa
+          path: OpenRoadDrive.ipa
+          if-no-files-found: error
+          retention-days: 14

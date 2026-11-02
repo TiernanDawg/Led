@@ -1,0 +1,35 @@
+name: OpenRoadDrive
+options:
+  bundleIdPrefix: com.tiernan
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+packages:
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    exactVersion: 6.31.0
+targets:
+  OpenRoadDrive:
+    type: application
+    platform: iOS
+    sources:
+      - path: OpenRoadDrive
+    dependencies:
+      - package: MapLibre
+        product: MapLibre
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tiernan.openroaddrive
+        PRODUCT_NAME: OpenRoadDrive
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: OpenRoad Drive
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Location is used to place your car at your real-world position on the map."
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: ""
+        ENABLE_PREVIEWS: YES
+        SUPPORTS_MACCATALYST: NO
