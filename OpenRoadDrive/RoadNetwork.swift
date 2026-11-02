@@ -25,7 +25,7 @@ enum RoadNetworkError: Error {
 
 enum RoadNetwork {
     static func fetch(near center: CLLocationCoordinate2D) async throws -> [RoadEdge] {
-        let query = "[out:json][timeout:25];way(around:900,\(center.latitude),\(center.longitude))[highway][area!=yes];out geom;"
+        let query = "[out:json][timeout:25];way(around:900,\(center.latitude),\(center.longitude))[highway~\"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|service|track|road)$\"][area!=yes];out geom;"
         var components = URLComponents(string: "https://overpass-api.de/api/interpreter")!
         components.queryItems = [URLQueryItem(name: "data", value: query)]
         var request = URLRequest(url: components.url!)
