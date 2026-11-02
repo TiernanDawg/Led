@@ -1,4 +1,4 @@
-name: Build iOS IPA # build self-contained RealityKit road scene
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ permissions:
 jobs:
   build:
     name: Build unsigned iOS IPA
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - name: Check out source
@@ -22,8 +22,10 @@ jobs:
 
       - name: Select Xcode
         run: |
+          set -euo pipefail
           xcodebuild -version
           xcode-select -p
+          xcodebuild -showsdks | grep -E 'iOS.*27'
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -58,6 +60,7 @@ jobs:
           ditto "$APP_PATH" Payload/OpenRoadDrive.app
           ditto -c -k --sequesterRsrc --keepParent Payload OpenRoadDrive.ipa
           test -s OpenRoadDrive.ipa
+          unzip -t OpenRoadDrive.ipa
           unzip -l OpenRoadDrive.ipa | grep 'Payload/OpenRoadDrive.app/Info.plist'
 
       - name: Upload IPA artifact
