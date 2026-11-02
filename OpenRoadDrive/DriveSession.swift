@@ -181,7 +181,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
 
         var nextSpeed = max(0, speed + acceleration * dt)
         let limit = edge.speedLimit / 3.6
-        nextSpeed = min(nextSpeed, limit, 42.0)
+        nextSpeed = min(nextSpeed, min(limit, 42.0))
         speedKPH = nextSpeed * 3.6
 
         let travel = nextSpeed * dt
