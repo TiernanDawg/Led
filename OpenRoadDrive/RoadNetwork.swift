@@ -102,6 +102,8 @@ enum RoadNetwork {
             }
         }
 
+        guard !edges.isEmpty else { throw RoadNetworkError.noRoadsFound }
+
         let terrain = await fetchTerrain(near: center)
         let elevatedEdges = edges.map { edge -> RoadEdge in
             var result = edge
