@@ -205,7 +205,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         nextManeuverDistance = distance(from: location.coordinate, to: step)
         let remainingSteps = steps.dropFirst(nextIndex)
         remainingDistance = remainingSteps.reduce(0) { $0 + $1.distance }
-        remainingTime = remainingSteps.reduce(0) { $0 + $1.expectedTravelTime }
+        remainingTime = route.distance > 0 ? remainingDistance * route.expectedTravelTime / route.distance : 0
         if location.distance(from: CLLocation(latitude: destination.placemark.coordinate.latitude, longitude: destination.placemark.coordinate.longitude)) < 35 {
             speak("You have arrived at your destination.")
             clearRoute()
@@ -234,7 +234,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
             let projected = MKMapPoint(x: a.x + t*dx, y: a.y + t*dy)
             minimum = min(minimum, point.distance(to: projected))
         }
-        return minimum * MKMapPointsPerMeter
+        return minimum * MKMetersPerMapPointAtLatitude(coordinate.latitude)
     }
 
     private func speak(_ text: String) {
