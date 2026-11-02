@@ -1,6 +1,7 @@
 import Combine
 import CoreLocation
 import Foundation
+import GameController
 
 enum DriveCameraMode: String, CaseIterable {
     case follow = "THIRD PERSON"
@@ -21,10 +22,12 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var isBraking = false
     @Published private(set) var gpsEnabled = false
     @Published private(set) var roadReady = false
+    @Published private(set) var controllerConnected = false
     @Published var cameraMode: DriveCameraMode = .follow
 
     private let locationManager = CLLocationManager()
     private var simulationTask: Task<Void, Never>?
+    private var controllerObservers: [NSObjectProtocol] = []
     private var roadEdges: [RoadEdge] = []
     private var origin = CLLocationCoordinate2D(latitude: 41.001, longitude: -75.181)
     private var activeEdge = -1
@@ -41,13 +44,16 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     override init() {
         super.init()
         locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        locationManager.distanceFilter = 5
+        locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        locationManager.distanceFilter = 10
+        installControllerObservers()
     }
 
     func start() {
         guard simulationTask == nil else { return }
         Task { await loadRoads(near: coordinate) }
+        GCController.startWirelessControllerDiscovery {}
+        connectAvailableControllers()
         simulationTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 50_000_000)
@@ -63,19 +69,32 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     func toggleAcceleration() {
-        throttle.toggle()
-        isAccelerating = throttle
-        if throttle { brake = false; isBraking = false }
+        setThrottle(!throttle)
     }
 
     func toggleBrake() {
-        brake.toggle()
-        isBraking = brake
-        if brake { throttle = false; isAccelerating = false }
+        setBrake(!brake)
+    }
+
+    func setThrottle(_ active: Bool) {
+        throttle = active
+        isAccelerating = active
+        if active {
+            brake = false
+            isBraking = false
+        }
+    }
+
+    func setBrake(_ active: Bool) {
+        brake = active
+        isBraking = active
+        if active {
+            throttle = false
+            isAccelerating = false
+        }
     }
 
     func steer(_ direction: Double) {
-        // Steering selects the branch at the next mapped junction; it cannot turn off-road.
         turnRequest = max(-1, min(1, direction))
     }
 
@@ -91,6 +110,60 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
             roadStatus = "LOCATION PERMISSION DENIED"
         @unknown default:
             roadStatus = "LOCATION UNAVAILABLE"
+        }
+    }
+
+    private func installControllerObservers() {
+        let center = NotificationCenter.default
+        controllerObservers.append(center.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { [weak self] note in
+            guard let controller = note.object as? GCController else { return }
+            Task { @MainActor in self?.configure(controller) }
+        })
+        controllerObservers.append(center.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.controllerConnected = !GCController.controllers().isEmpty
+                self?.setThrottle(false)
+                self?.setBrake(false)
+                self?.steer(0)
+            }
+        })
+    }
+
+    private func connectAvailableControllers() {
+        let available = GCController.controllers()
+        if let controller = available.first {
+            configure(controller)
+        }
+    }
+
+    private func configure(_ controller: GCController) {
+        guard let pad = controller.extendedGamepad else {
+            controllerConnected = false
+            return
+        }
+        controllerConnected = true
+        controller.playerIndex = .index1
+
+        pad.rightTrigger.valueChangedHandler = { [weak self] _, value, _ in
+            Task { @MainActor in self?.setThrottle(value > 0.08) }
+        }
+        pad.leftTrigger.valueChangedHandler = { [weak self] _, value, _ in
+            Task { @MainActor in self?.setBrake(value > 0.08) }
+        }
+        pad.leftThumbstick.xAxis.valueChangedHandler = { [weak self] _, value in
+            Task { @MainActor in
+                self?.steer(abs(value) > 0.22 ? Double(value) : 0)
+            }
+        }
+        pad.buttonA.valueChangedHandler = { [weak self] _, _, pressed in
+            Task { @MainActor in self?.setThrottle(pressed) }
+        }
+        pad.buttonB.valueChangedHandler = { [weak self] _, _, pressed in
+            Task { @MainActor in self?.setBrake(pressed) }
+        }
+        pad.buttonY.valueChangedHandler = { [weak self] _, _, pressed in
+            guard pressed else { return }
+            Task { @MainActor in self?.changeCamera() }
         }
     }
 
@@ -112,7 +185,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     private func loadRoads(near position: CLLocationCoordinate2D) async {
-        roadStatus = "DOWNLOADING OSM ROAD GRAPH"
+        roadStatus = "DOWNLOADING ROAD DATA"
         roadReady = false
         do {
             let fetched = try await RoadNetwork.fetch(near: position)
@@ -125,13 +198,12 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
                 return
             }
             roadReady = true
-            roadStatus = "ROAD NETWORK READY · \(fetched.count) SEGMENTS"
+            roadStatus = "ROAD NETWORK READY"
         } catch {
             roadStatus = "ROAD DATA UNAVAILABLE · CHECK CONNECTION"
             roadReady = false
             speedKPH = 0
-            throttle = false
-            isAccelerating = false
+            setThrottle(false)
         }
     }
 
@@ -179,11 +251,8 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
         else if throttle { acceleration = 3.2 }
         else { acceleration = -0.32 }
 
-        var nextSpeed = max(0, speed + acceleration * dt)
-        let limit = edge.speedLimit / 3.6
-        nextSpeed = min(nextSpeed, min(limit, 42.0))
+        let nextSpeed = min(max(0, speed + acceleration * dt), min(edge.speedLimit / 3.6, 42.0))
         speedKPH = nextSpeed * 3.6
-
         let travel = nextSpeed * dt
         progress += travel
         distanceMeters += travel
@@ -194,8 +263,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
             guard let next = chooseNextEdge() else {
                 progress = roadEdges[activeEdge].length
                 speedKPH = 0
-                throttle = false
-                isAccelerating = false
+                setThrottle(false)
                 roadStatus = "END OF MAPPED ROAD · TURN AROUND"
                 break
             }
@@ -216,12 +284,10 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
 
         for (index, edge) in roadEdges.enumerated() where index != activeEdge {
             if Self.distance(endpoint, edge.start) < 3 {
-                let bearing = Self.bearing(from: edge.start, to: edge.end)
-                choices.append((index, true, Self.angleDifference(desired, bearing)))
+                choices.append((index, true, Self.angleDifference(desired, Self.bearing(from: edge.start, to: edge.end))))
             }
             if Self.distance(endpoint, edge.end) < 3 {
-                let bearing = Self.bearing(from: edge.end, to: edge.start)
-                choices.append((index, false, Self.angleDifference(desired, bearing)))
+                choices.append((index, false, Self.angleDifference(desired, Self.bearing(from: edge.end, to: edge.start))))
             }
         }
         guard let choice = choices.min(by: { $0.2 < $1.2 }) else { return nil }
