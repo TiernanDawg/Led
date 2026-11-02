@@ -1,4 +1,4 @@
-name: Build iOS IPA # build 3D road physics compatibility fix
+name: Build iOS IPA # build self-contained RealityKit road scene
 
 on:
   workflow_dispatch:
