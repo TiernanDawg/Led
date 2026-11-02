@@ -60,7 +60,7 @@ struct ContentView: View {
                 .navigationTitle("Go to")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Done") { showLocationSearch = false }
                     }
                 }
