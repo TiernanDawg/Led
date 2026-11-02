@@ -1,5 +1,4 @@
-name: Build iOS IPA
-
+name: Build MiniMap iOS IPA
 on:
   workflow_dispatch:
   push:
@@ -7,66 +6,49 @@ on:
     paths-ignore:
       - "**.md"
       - "LICENSE"
-
 permissions:
   contents: read
-
 jobs:
   build:
-    name: Build unsigned iOS IPA
+    name: Build unsigned MiniMap IPA
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-
       - name: Select Xcode
         run: |
           set -euo pipefail
           xcodebuild -version
           xcode-select -p
           xcodebuild -showsdks | grep -E 'iOS.*27'
-
       - name: Install XcodeGen
         run: brew install xcodegen
-
       - name: Generate Xcode project
         run: xcodegen generate
-
       - name: Resolve Swift packages
-        run: xcodebuild -resolvePackageDependencies -project OpenRoadDrive.xcodeproj -scheme OpenRoadDrive
-
+        run: xcodebuild -resolvePackageDependencies -project MiniMap.xcodeproj -scheme MiniMap
       - name: Build for iOS device
         run: |
           set -o pipefail
-          xcodebuild \
-            -project OpenRoadDrive.xcodeproj \
-            -scheme OpenRoadDrive \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$PWD/build" \
-            CODE_SIGNING_ALLOWED=NO \
-            build | tee build.log
-
+          xcodebuild -project MiniMap.xcodeproj -scheme MiniMap -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$PWD/build" CODE_SIGNING_ALLOWED=NO build | tee build.log
       - name: Package unsigned IPA
         run: |
           set -euo pipefail
-          APP_PATH="$PWD/build/Build/Products/Release-iphoneos/OpenRoadDrive.app"
+          APP_PATH="$PWD/build/Build/Products/Release-iphoneos/MiniMap.app"
           test -d "$APP_PATH"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
-          rm -rf Payload OpenRoadDrive.ipa
+          rm -rf Payload MiniMap.ipa
           mkdir -p Payload
-          ditto "$APP_PATH" Payload/OpenRoadDrive.app
-          ditto -c -k --sequesterRsrc --keepParent Payload OpenRoadDrive.ipa
-          test -s OpenRoadDrive.ipa
-          unzip -t OpenRoadDrive.ipa
-          unzip -l OpenRoadDrive.ipa | grep 'Payload/OpenRoadDrive.app/Info.plist'
-
+          ditto "$APP_PATH" Payload/MiniMap.app
+          ditto -c -k --sequesterRsrc --keepParent Payload MiniMap.ipa
+          test -s MiniMap.ipa
+          unzip -t MiniMap.ipa
+          unzip -l MiniMap.ipa | grep 'Payload/MiniMap.app/Info.plist'
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenRoadDrive-unsigned-ipa
-          path: OpenRoadDrive.ipa
+          name: MiniMap-unsigned-ipa
+          path: MiniMap.ipa
           if-no-files-found: error
           retention-days: 14
