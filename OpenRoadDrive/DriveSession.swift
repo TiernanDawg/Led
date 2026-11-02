@@ -25,6 +25,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var isBraking = false
     @Published private(set) var gpsEnabled = false
     @Published private(set) var roadReady = false
+    @Published private(set) var isOnRoad = false
     @Published private(set) var controllerConnected = false
     @Published var cameraMode: DriveCameraMode = .follow
 
@@ -40,7 +41,6 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     private var tapSteeringTime = 0.0
     private var roadCheckTime = 0.0
     private var nearestRoadLimitKPH = 25.0
-    private var isOnRoad = false
     private var throttle = false
     private var brake = false
     private var isLoadingRoads = false
