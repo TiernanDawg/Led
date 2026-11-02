@@ -221,8 +221,8 @@ struct ContentView: View {
             }
 
             HStack(spacing: 9) {
-                steeringButton("arrow.left", label: "LEFT") { drive.steer(-1) }
-                steeringButton("arrow.right", label: "RIGHT") { drive.steer(1) }
+                steeringButton("arrow.left", label: "LEFT") { drive.tapSteer(-1) }
+                steeringButton("arrow.right", label: "RIGHT") { drive.tapSteer(1) }
                 Spacer(minLength: 1)
                 actionButton("BRAKE", symbol: "brake.warning", active: drive.isBraking, color: .red) {
                     drive.toggleBrake()
