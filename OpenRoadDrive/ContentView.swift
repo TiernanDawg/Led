@@ -14,6 +14,10 @@ struct ContentView: View {
                 DrivingSceneView(drive: drive)
                     .ignoresSafeArea()
 
+                if !drive.roadReady {
+                    worldLoadingOverlay
+                }
+
                 VStack(spacing: 0) {
                     topHUD
                     Spacer(minLength: 10)
@@ -67,6 +71,40 @@ struct ContentView: View {
             }
             .presentationDetents([.medium])
         }
+    }
+
+    private var worldLoadingOverlay: some View {
+        VStack(spacing: 11) {
+            if drive.isLoadingWorld {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(accent)
+                Text("BUILDING YOUR WORLD")
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .tracking(1.1)
+            } else {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 25, weight: .semibold))
+                    .foregroundStyle(.orange)
+                Text("WORLD NOT READY")
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .tracking(1.1)
+                Button("TRY AGAIN") { drive.retryWorldLoad() }
+                    .font(.system(size: 11, weight: .black))
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent)
+            }
+            Text(drive.roadStatus)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.72))
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 18)
+        .frame(maxWidth: 270)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.18)))
+        .shadow(color: .black.opacity(0.2), radius: 18, y: 8)
     }
 
     private var topHUD: some View {
@@ -158,7 +196,7 @@ struct ContentView: View {
                         .foregroundStyle(.white.opacity(0.65))
                 }
             }
-            .frame(width: 68, height: 68)
+            .frame(width: 60, height: 60)
 
             VStack(alignment: .leading, spacing: 7) {
                 metricLine("DISTANCE", value: String(format: "%.2f KM", drive.distanceMeters / 1000))
@@ -202,8 +240,8 @@ struct ContentView: View {
     }
 
     private var bottomHUD: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 9) {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
                 speedHUD
                 Button { drive.enableGPS() } label: {
                     VStack(spacing: 6) {
@@ -213,7 +251,7 @@ struct ContentView: View {
                             .font(.system(size: 8, weight: .black))
                             .tracking(0.8)
                     }
-                    .frame(width: 57, height: 92)
+                    .frame(width: 52, height: 76)
                     .background(panel, in: RoundedRectangle(cornerRadius: 17))
                     .overlay(RoundedRectangle(cornerRadius: 17).stroke(.white.opacity(0.13)))
                 }
@@ -234,7 +272,7 @@ struct ContentView: View {
                 .opacity(drive.roadReady ? 1 : 0.45)
             }
 
-            Text("© OpenStreetMap contributors  ·  Elevation: Copernicus DEM via Open-Meteo")
+            Text("© OpenStreetMap · Elevation: Copernicus DEM")
                 .font(.system(size: 7, weight: .medium))
                 .foregroundStyle(.white.opacity(0.48))
                 .frame(maxWidth: .infinity)
@@ -253,7 +291,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .padding(11)
+        .padding(9)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 23))
         .overlay(RoundedRectangle(cornerRadius: 23).stroke(.white.opacity(0.15)))
     }
@@ -265,7 +303,7 @@ struct ContentView: View {
                 Text(label).font(.system(size: 8, weight: .black)).tracking(0.8)
             }
             .foregroundStyle(.white)
-            .frame(width: 54, height: 66)
+            .frame(width: 50, height: 58)
             .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.17)))
         }
@@ -282,7 +320,7 @@ struct ContentView: View {
                 Text(title).font(.system(size: 8, weight: .black)).tracking(0.8)
             }
             .foregroundStyle(active ? .black : .white)
-            .frame(width: 68, height: 66)
+            .frame(width: 62, height: 58)
             .background(active ? color : .white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(active ? color : .white.opacity(0.17)))
         }
