@@ -173,6 +173,12 @@ enum RoadNetwork {
         )
     }
 
+    static func height(at coordinate: CLLocationCoordinate2D,
+                       origin: CLLocationCoordinate2D,
+                       terrain: TerrainVisual) -> Float {
+        terrainHeight(at: coordinate, origin: origin, terrain: terrain)
+    }
+
     private static func terrainHeight(at coordinate: CLLocationCoordinate2D,
                                       origin: CLLocationCoordinate2D,
                                       terrain: TerrainVisual) -> Float {
