@@ -5,19 +5,12 @@ options:
     iOS: "16.0"
   createIntermediateGroups: true
   developmentLanguage: en
-packages:
-  MapLibre:
-    url: https://github.com/maplibre/maplibre-gl-native-distribution
-    exactVersion: 6.31.0
 targets:
   OpenRoadDrive:
     type: application
     platform: iOS
     sources:
       - path: OpenRoadDrive
-    dependencies:
-      - package: MapLibre
-        product: MapLibre
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tiernan.openroaddrive
