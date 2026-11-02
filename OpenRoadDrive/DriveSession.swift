@@ -3,12 +3,10 @@ import CoreLocation
 import Foundation
 
 enum DriveCameraMode: String, CaseIterable {
-    case follow = "FOLLOW"
+    case follow = "THIRD PERSON"
     case cockpit = "COCKPIT"
 
-    var next: DriveCameraMode {
-        self == .follow ? .cockpit : .follow
-    }
+    var next: DriveCameraMode { self == .follow ? .cockpit : .follow }
 }
 
 @MainActor
@@ -17,30 +15,44 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var heading = 0.0
     @Published private(set) var speedKPH = 0.0
     @Published private(set) var distanceMeters = 0.0
+    @Published private(set) var roads: [RoadVisual] = []
+    @Published private(set) var roadStatus = "LOADING LOCAL ROADS"
     @Published private(set) var isAccelerating = false
     @Published private(set) var isBraking = false
     @Published private(set) var gpsEnabled = false
-
+    @Published private(set) var roadReady = false
     @Published var cameraMode: DriveCameraMode = .follow
 
-    private let earthRadius = 6_371_008.8
     private let locationManager = CLLocationManager()
     private var simulationTask: Task<Void, Never>?
+    private var roadEdges: [RoadEdge] = []
+    private var origin = CLLocationCoordinate2D(latitude: 41.001, longitude: -75.181)
+    private var activeEdge = -1
+    private var forward = true
+    private var progress = 0.0
+    private var turnRequest = 0.0
+    private var throttle = false
+    private var brake = false
+
+    var worldPosition: (x: Float, z: Float) {
+        RoadNetwork.localPosition(coordinate, origin: origin)
+    }
 
     override init() {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        locationManager.distanceFilter = 2
+        locationManager.distanceFilter = 5
     }
 
     func start() {
         guard simulationTask == nil else { return }
+        Task { await loadRoads(near: coordinate) }
         simulationTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 100_000_000)
+                try? await Task.sleep(nanoseconds: 50_000_000)
                 guard !Task.isCancelled else { break }
-                self?.tick(deltaTime: 0.1)
+                self?.tick(deltaTime: 0.05)
             }
         }
     }
@@ -51,23 +63,23 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     func toggleAcceleration() {
-        isAccelerating.toggle()
-        if isAccelerating { isBraking = false }
+        throttle.toggle()
+        isAccelerating = throttle
+        if throttle { brake = false; isBraking = false }
     }
 
     func toggleBrake() {
-        isBraking.toggle()
-        if isBraking { isAccelerating = false }
+        brake.toggle()
+        isBraking = brake
+        if brake { throttle = false; isAccelerating = false }
     }
 
     func steer(_ direction: Double) {
-        let steeringRate = 5.0 + min(speedKPH / 18.0, 5.0)
-        heading = normalizedHeading(heading + direction * steeringRate)
+        // Steering selects the branch at the next mapped junction; it cannot turn off-road.
+        turnRequest = max(-1, min(1, direction))
     }
 
-    func changeCamera() {
-        cameraMode = cameraMode.next
-    }
+    func changeCamera() { cameraMode = cameraMode.next }
 
     func enableGPS() {
         switch locationManager.authorizationStatus {
@@ -76,9 +88,9 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
         case .notDetermined:
             locationManager.requestWhenInUseAuthorization()
         case .denied, .restricted:
-            gpsEnabled = false
+            roadStatus = "LOCATION PERMISSION DENIED"
         @unknown default:
-            gpsEnabled = false
+            roadStatus = "LOCATION UNAVAILABLE"
         }
     }
 
@@ -91,51 +103,161 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let latest = locations.last, latest.horizontalAccuracy >= 0 else { return }
-        coordinate = latest.coordinate
         gpsEnabled = true
-        manager.stopUpdatingLocation()
+        Task { await loadRoads(near: latest.coordinate) }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        gpsEnabled = false
-        manager.stopUpdatingLocation()
+        roadStatus = "GPS FIX UNAVAILABLE"
+    }
+
+    private func loadRoads(near position: CLLocationCoordinate2D) async {
+        roadStatus = "DOWNLOADING OSM ROAD GRAPH"
+        roadReady = false
+        do {
+            let fetched = try await RoadNetwork.fetch(near: position)
+            roadEdges = fetched
+            origin = position
+            roads = RoadNetwork.visuals(fetched, origin: origin)
+            coordinate = position
+            guard snapToNearestRoad() else {
+                roadStatus = "NO DRIVABLE ROAD NEARBY"
+                return
+            }
+            roadReady = true
+            roadStatus = "ROAD NETWORK READY · \(fetched.count) SEGMENTS"
+        } catch {
+            roadStatus = "ROAD DATA UNAVAILABLE · CHECK CONNECTION"
+            roadReady = false
+            speedKPH = 0
+            throttle = false
+            isAccelerating = false
+        }
+    }
+
+    private func snapToNearestRoad() -> Bool {
+        var bestIndex = -1
+        var bestProgress = 0.0
+        var bestDistance = Double.greatestFiniteMagnitude
+        var bestForward = true
+
+        for (index, edge) in roadEdges.enumerated() {
+            let a = RoadNetwork.localPosition(edge.start, origin: origin)
+            let b = RoadNetwork.localPosition(edge.end, origin: origin)
+            let p = RoadNetwork.localPosition(coordinate, origin: origin)
+            let ax = Double(a.x), az = Double(a.z)
+            let dx = Double(b.x - a.x), dz = Double(b.z - a.z)
+            let denominator = dx * dx + dz * dz
+            guard denominator > 0 else { continue }
+            let t = max(0, min(1, ((Double(p.x) - ax) * dx + (Double(p.z) - az) * dz) / denominator))
+            let px = ax + t * dx
+            let pz = az + t * dz
+            let distance = hypot(Double(p.x) - px, Double(p.z) - pz)
+            if distance < bestDistance {
+                bestDistance = distance
+                bestIndex = index
+                bestProgress = t * edge.length
+                let bearing = Self.bearing(from: edge.start, to: edge.end)
+                bestForward = Self.angleDifference(heading, bearing) <= Self.angleDifference(heading, bearing + 180)
+            }
+        }
+
+        guard bestIndex >= 0, bestDistance < 80 else { return false }
+        activeEdge = bestIndex
+        forward = bestForward
+        progress = bestForward ? bestProgress : roadEdges[bestIndex].length - bestProgress
+        updateCoordinateOnEdge()
+        return true
     }
 
     private func tick(deltaTime dt: Double) {
-        if isBraking {
-            speedKPH = max(0, speedKPH - 28 * dt)
-        } else if isAccelerating {
-            speedKPH = min(180, speedKPH + 13 * dt)
-        } else {
-            speedKPH = max(0, speedKPH - 3.2 * dt)
+        guard roadReady, activeEdge >= 0 else { speedKPH = 0; return }
+        let edge = roadEdges[activeEdge]
+        let speed = speedKPH / 3.6
+        let acceleration: Double
+        if brake { acceleration = -8.5 }
+        else if throttle { acceleration = 3.2 }
+        else { acceleration = -0.32 }
+
+        var nextSpeed = max(0, speed + acceleration * dt)
+        let limit = edge.speedLimit / 3.6
+        nextSpeed = min(nextSpeed, limit, 42.0)
+        speedKPH = nextSpeed * 3.6
+
+        let travel = nextSpeed * dt
+        progress += travel
+        distanceMeters += travel
+
+        var guardCount = 0
+        while progress >= roadEdges[activeEdge].length && guardCount < 4 {
+            let overflow = progress - roadEdges[activeEdge].length
+            guard let next = chooseNextEdge() else {
+                progress = roadEdges[activeEdge].length
+                speedKPH = 0
+                throttle = false
+                isAccelerating = false
+                roadStatus = "END OF MAPPED ROAD · TURN AROUND"
+                break
+            }
+            activeEdge = next.index
+            forward = next.forward
+            progress = overflow
+            guardCount += 1
         }
+        updateCoordinateOnEdge()
+    }
 
-        let meters = (speedKPH / 3.6) * dt
-        guard meters > 0 else { return }
+    private func chooseNextEdge() -> (index: Int, forward: Bool)? {
+        let current = roadEdges[activeEdge]
+        let endpoint = forward ? current.end : current.start
+        let incoming = Self.bearing(from: current.start, to: current.end) + (forward ? 0 : 180)
+        let desired = incoming + turnRequest * 65
+        var choices: [(Int, Bool, Double)] = []
 
-        let bearing = heading * .pi / 180
-        let latitudeRadians = coordinate.latitude * .pi / 180
-        let angularDistance = meters / earthRadius
+        for (index, edge) in roadEdges.enumerated() where index != activeEdge {
+            if Self.distance(endpoint, edge.start) < 3 {
+                let bearing = Self.bearing(from: edge.start, to: edge.end)
+                choices.append((index, true, Self.angleDifference(desired, bearing)))
+            }
+            if Self.distance(endpoint, edge.end) < 3 {
+                let bearing = Self.bearing(from: edge.end, to: edge.start)
+                choices.append((index, false, Self.angleDifference(desired, bearing)))
+            }
+        }
+        guard let choice = choices.min(by: { $0.2 < $1.2 }) else { return nil }
+        turnRequest = 0
+        return (choice.0, choice.1)
+    }
 
-        let nextLatitude = coordinate.latitude + (angularDistance * cos(bearing)) * 180 / .pi
-        let longitudeScale = max(0.01, cos(latitudeRadians))
-        let nextLongitude = coordinate.longitude +
-            (angularDistance * sin(bearing) / longitudeScale) * 180 / .pi
-
+    private func updateCoordinateOnEdge() {
+        guard activeEdge >= 0 else { return }
+        let edge = roadEdges[activeEdge]
+        let t = max(0, min(1, progress / edge.length))
+        let start = forward ? edge.start : edge.end
+        let end = forward ? edge.end : edge.start
         coordinate = CLLocationCoordinate2D(
-            latitude: min(85.0, max(-85.0, nextLatitude)),
-            longitude: normalizedLongitude(nextLongitude)
+            latitude: start.latitude + (end.latitude - start.latitude) * t,
+            longitude: start.longitude + (end.longitude - start.longitude) * t
         )
-        distanceMeters += meters
+        heading = Self.bearing(from: start, to: end)
     }
 
-    private func normalizedHeading(_ value: Double) -> Double {
-        let wrapped = value.truncatingRemainder(dividingBy: 360)
-        return wrapped < 0 ? wrapped + 360 : wrapped
+    private static func bearing(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> Double {
+        let lat1 = a.latitude * .pi / 180
+        let lat2 = b.latitude * .pi / 180
+        let deltaLon = (b.longitude - a.longitude) * .pi / 180
+        let y = sin(deltaLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon)
+        return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
     }
 
-    private func normalizedLongitude(_ value: Double) -> Double {
-        let wrapped = (value + 180).truncatingRemainder(dividingBy: 360)
-        return (wrapped < 0 ? wrapped + 360 : wrapped) - 180
+    private static func angleDifference(_ a: Double, _ b: Double) -> Double {
+        let difference = abs((a - b).truncatingRemainder(dividingBy: 360))
+        return min(difference, 360 - difference)
+    }
+
+    private static func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+        CLLocation(latitude: a.latitude, longitude: a.longitude)
+            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
     }
 }
