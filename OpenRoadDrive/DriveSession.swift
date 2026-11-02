@@ -104,6 +104,24 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
 
     func changeCamera() { cameraMode = cameraMode.next }
 
+    func searchLocation(_ query: String) {
+        let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !search.isEmpty else { return }
+        roadStatus = "SEARCHING FOR LOCATION"
+        Task {
+            do {
+                let matches = try await CLGeocoder().geocodeAddressString(search)
+                guard let coordinate = matches.first?.location?.coordinate else {
+                    roadStatus = "LOCATION NOT FOUND"
+                    return
+                }
+                await loadRoads(near: coordinate)
+            } catch {
+                roadStatus = "LOCATION SEARCH FAILED"
+            }
+        }
+    }
+
     func enableGPS() {
         switch locationManager.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
