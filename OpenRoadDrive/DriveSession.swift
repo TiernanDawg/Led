@@ -155,12 +155,6 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
                 self?.steer(abs(value) > 0.22 ? Double(value) : 0)
             }
         }
-        pad.buttonA.valueChangedHandler = { [weak self] _, _, pressed in
-            Task { @MainActor in self?.setThrottle(pressed) }
-        }
-        pad.buttonB.valueChangedHandler = { [weak self] _, _, pressed in
-            Task { @MainActor in self?.setBrake(pressed) }
-        }
         pad.buttonY.valueChangedHandler = { [weak self] _, _, pressed in
             guard pressed else { return }
             Task { @MainActor in self?.changeCamera() }
