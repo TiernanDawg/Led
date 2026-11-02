@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct OpenRoadDriveApp: App {
+struct MiniMapApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
