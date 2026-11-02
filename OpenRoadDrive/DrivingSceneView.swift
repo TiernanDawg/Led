@@ -29,7 +29,8 @@ struct DrivingSceneView: UIViewRepresentable {
             heading: drive.heading,
             cameraMode: drive.cameraMode,
             roads: drive.roads,
-            terrain: drive.terrain
+            terrain: drive.terrain,
+            revision: drive.worldRevision
         )
     }
 
@@ -39,7 +40,7 @@ struct DrivingSceneView: UIViewRepresentable {
         private let car = SCNNode()
         private let cameraNode = SCNNode()
         private var roadIDs: Set<Int> = []
-        private var terrainSignature = ""
+        private var worldRevision = -1
 
         func makeScene() -> SCNScene {
             scene.rootNode.addChildNode(world)
@@ -143,16 +144,12 @@ struct DrivingSceneView: UIViewRepresentable {
         }
 
         func update(position: (x: Float, z: Float), elevation: Float, heading: Double,
-                    cameraMode: DriveCameraMode, roads: [RoadVisual], terrain: TerrainVisual?) {
-            if Set(roads.map(\.id)) != roadIDs {
+                    cameraMode: DriveCameraMode, roads: [RoadVisual], terrain: TerrainVisual?,
+                    revision: Int) {
+            if revision != worldRevision {
                 rebuildRoads(roads)
-            }
-            if let terrain {
-                let signature = "\(terrain.columns)-\(terrain.rows)-\(terrain.elevations.first ?? 0)-\(terrain.elevations.last ?? 0)"
-                if signature != terrainSignature {
-                    rebuildTerrain(terrain)
-                    terrainSignature = signature
-                }
+                if let terrain { rebuildTerrain(terrain) }
+                worldRevision = revision
             }
 
             let yaw = Float(heading * .pi / 180)
