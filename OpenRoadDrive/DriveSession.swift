@@ -25,6 +25,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var isBraking = false
     @Published private(set) var gpsEnabled = false
     @Published private(set) var roadReady = false
+    @Published private(set) var isLoadingWorld = false
     @Published private(set) var isOnRoad = false
     @Published private(set) var controllerConnected = false
     @Published var cameraMode: DriveCameraMode = .follow
@@ -108,6 +109,10 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     func changeCamera() { cameraMode = cameraMode.next }
+
+    func retryWorldLoad() {
+        Task { await loadRoads(near: coordinate) }
+    }
 
     func searchLocation(_ query: String) {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -207,8 +212,12 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     private func loadRoads(near position: CLLocationCoordinate2D) async {
         guard !isLoadingRoads else { return }
         isLoadingRoads = true
-        defer { isLoadingRoads = false }
-        roadStatus = "STREAMING ROADS & TERRAIN"
+        isLoadingWorld = true
+        defer {
+            isLoadingRoads = false
+            isLoadingWorld = false
+        }
+        roadStatus = "LOADING NEARBY ROADS & TERRAIN"
         roadReady = false
 
         do {
@@ -224,7 +233,9 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
             worldRevision &+= 1
             updateNearestRoad()
             roadReady = true
-            roadStatus = "WORLD READY · FREE DRIVE"
+            roadStatus = fetched.edges.isEmpty
+                ? "ROAD DATA UNAVAILABLE · FREE DRIVE"
+                : "WORLD READY · FREE DRIVE"
         } catch {
             roadStatus = "WORLD DATA UNAVAILABLE · CHECK CONNECTION"
             roadReady = false
