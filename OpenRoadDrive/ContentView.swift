@@ -259,14 +259,14 @@ struct ContentView: View {
             }
 
             HStack(spacing: 9) {
-                steeringButton("arrow.left", label: "LEFT") { drive.tapSteer(-1) }
-                steeringButton("arrow.right", label: "RIGHT") { drive.tapSteer(1) }
+                steeringButton("arrow.left", label: "LEFT", direction: -1)
+                steeringButton("arrow.right", label: "RIGHT", direction: 1)
                 Spacer(minLength: 1)
-                actionButton("BRAKE", symbol: "brake.warning", active: drive.isBraking, color: .red) {
-                    drive.toggleBrake()
+                actionButton("BRAKE", symbol: "brake.warning", active: drive.isBraking, color: .red) { pressed in
+                    drive.setBrake(pressed)
                 }
-                actionButton(drive.isAccelerating ? "COAST" : "DRIVE", symbol: "arrow.up", active: drive.isAccelerating, color: accent) {
-                    drive.toggleAcceleration()
+                actionButton("DRIVE", symbol: "arrow.up", active: drive.isAccelerating, color: accent) { pressed in
+                    drive.setThrottle(pressed)
                 }
                 .disabled(!drive.roadReady)
                 .opacity(drive.roadReady ? 1 : 0.45)
@@ -296,8 +296,8 @@ struct ContentView: View {
         .overlay(RoundedRectangle(cornerRadius: 23).stroke(.white.opacity(0.15)))
     }
 
-    private func steeringButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func steeringButton(_ symbol: String, label: String, direction: Double) -> some View {
+        Button {} label: {
             VStack(spacing: 6) {
                 Image(systemName: symbol).font(.system(size: 19, weight: .black))
                 Text(label).font(.system(size: 8, weight: .black)).tracking(0.8)
@@ -308,13 +308,16 @@ struct ContentView: View {
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.17)))
         }
         .buttonStyle(.plain)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: 100,
+                            pressing: { pressed in drive.steer(pressed ? direction : 0) },
+                            perform: {})
         .disabled(!drive.roadReady)
         .opacity(drive.roadReady ? 1 : 0.4)
     }
 
     private func actionButton(_ title: String, symbol: String, active: Bool,
-                              color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+                              color: Color, action: @escaping (Bool) -> Void) -> some View {
+        Button {} label: {
             VStack(spacing: 6) {
                 Image(systemName: symbol).font(.system(size: 19, weight: .black))
                 Text(title).font(.system(size: 8, weight: .black)).tracking(0.8)
@@ -325,6 +328,8 @@ struct ContentView: View {
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(active ? color : .white.opacity(0.17)))
         }
         .buttonStyle(.plain)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: 100,
+                            pressing: action, perform: {})
     }
 }
 
