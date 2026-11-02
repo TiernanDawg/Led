@@ -163,7 +163,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 7) {
                 metricLine("DISTANCE", value: String(format: "%.2f KM", drive.distanceMeters / 1000))
                 metricLine("HEADING", value: String(format: "%03.0f°", drive.heading))
-                metricLine("ROAD", value: drive.roadReady ? "CONNECTED" : "SEARCHING")
+                metricLine("SURFACE", value: drive.roadReady ? (drive.isOnRoad ? "ASPHALT" : "OFF ROAD") : "LOADING")
             }
             Spacer(minLength: 0)
         }
