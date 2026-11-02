@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var drive = DriveSession()
+    @State private var showLocationSearch = false
+    @State private var locationQuery = ""
 
     private let accent = Color(red: 0.12, green: 0.82, blue: 0.98)
     private let panel = Color.black.opacity(0.66)
@@ -30,6 +32,41 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .onAppear { drive.start() }
         .onDisappear { drive.stop() }
+        .sheet(isPresented: $showLocationSearch) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Choose any real-world location")
+                        .font(.headline)
+                    TextField("City, landmark, or address", text: $locationQuery)
+                        .textFieldStyle(.roundedBorder)
+                        .submitLabel(.search)
+                        .onSubmit {
+                            drive.searchLocation(locationQuery)
+                            showLocationSearch = false
+                        }
+                    Button {
+                        drive.searchLocation(locationQuery)
+                        showLocationSearch = false
+                    } label: {
+                        Text("LOAD WORLD").fontWeight(.bold).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Text("Roads and terrain load around the selected location. An internet connection is required.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding()
+                .navigationTitle("Go to")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { showLocationSearch = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
     }
 
     private var topHUD: some View {
@@ -70,6 +107,20 @@ struct ContentView: View {
             .frame(width: 51, height: 55)
             .background(panel, in: RoundedRectangle(cornerRadius: 15))
             .overlay(RoundedRectangle(cornerRadius: 15).stroke(drive.controllerConnected ? accent.opacity(0.55) : .white.opacity(0.12)))
+
+            Button { showLocationSearch = true } label: {
+                VStack(spacing: 5) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 17, weight: .semibold))
+                    Text("GO TO")
+                        .font(.system(size: 8, weight: .black))
+                        .tracking(0.6)
+                }
+                .frame(width: 55, height: 55)
+                .background(panel, in: RoundedRectangle(cornerRadius: 15))
+                .overlay(RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.12)))
+            }
+            .buttonStyle(.plain)
 
             Button { drive.changeCamera() } label: {
                 VStack(spacing: 5) {
@@ -182,6 +233,11 @@ struct ContentView: View {
                 .disabled(!drive.roadReady)
                 .opacity(drive.roadReady ? 1 : 0.45)
             }
+
+            Text("© OpenStreetMap contributors  ·  Elevation: Copernicus DEM via Open-Meteo")
+                .font(.system(size: 7, weight: .medium))
+                .foregroundStyle(.white.opacity(0.48))
+                .frame(maxWidth: .infinity)
 
             if drive.controllerConnected {
                 Text("XBOX: RT ACCELERATE  ·  LT BRAKE  ·  LEFT STICK STEER  ·  Y CAMERA")
