@@ -20,6 +20,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var isAccelerating = false
     @Published private(set) var isBraking = false
     @Published private(set) var gpsEnabled = false
+
     @Published var cameraMode: DriveCameraMode = .follow
 
     private let earthRadius = 6_371_008.8
@@ -71,7 +72,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     func enableGPS() {
         switch locationManager.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
-            locationManager.startUpdatingLocation()
+            locationManager.requestLocation()
         case .notDetermined:
             locationManager.requestWhenInUseAuthorization()
         case .denied, .restricted:
@@ -84,7 +85,7 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         if manager.authorizationStatus == .authorizedAlways ||
             manager.authorizationStatus == .authorizedWhenInUse {
-            manager.startUpdatingLocation()
+            manager.requestLocation()
         }
     }
 
@@ -92,10 +93,12 @@ final class DriveSession: NSObject, ObservableObject, CLLocationManagerDelegate 
         guard let latest = locations.last, latest.horizontalAccuracy >= 0 else { return }
         coordinate = latest.coordinate
         gpsEnabled = true
+        manager.stopUpdatingLocation()
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         gpsEnabled = false
+        manager.stopUpdatingLocation()
     }
 
     private func tick(deltaTime dt: Double) {

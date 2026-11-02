@@ -18,6 +18,9 @@ struct DrivingMapView: UIViewRepresentable {
         mapView.delegate = context.coordinator
         mapView.logoView.isHidden = false
         mapView.attributionButton.isHidden = false
+        // Keep required map attribution clear of the on-screen driving controls.
+        mapView.logoViewMargins = CGPoint(x: 12, y: 156)
+        mapView.attributionButtonMargins = CGPoint(x: 12, y: 156)
         mapView.isRotateEnabled = false
         mapView.isScrollEnabled = false
         mapView.isZoomEnabled = false
