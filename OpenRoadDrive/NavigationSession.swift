@@ -189,11 +189,13 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
                     if !Task.isCancelled { error = "No driving route was found." }
                     return
                 }
+                let shouldAvoidTolls = avoidTolls
+                let shouldAvoidHighways = avoidHighways
                 routeOptions = response.routes.sorted { lhs, rhs in
                     func preferenceScore(_ candidate: MKRoute) -> Double {
                         let text = ([candidate.name] + candidate.steps.map(\.instructions)).joined(separator: " ").lowercased()
-                        let tollPenalty = avoidTolls && text.contains("toll") ? 1_800.0 : 0
-                        let highwayPenalty = avoidHighways && (text.contains("highway") || text.contains("interstate") || text.contains("motorway")) ? 900.0 : 0
+                        let tollPenalty = shouldAvoidTolls && text.contains("toll") ? 1_800.0 : 0
+                        let highwayPenalty = shouldAvoidHighways && (text.contains("highway") || text.contains("interstate") || text.contains("motorway")) ? 900.0 : 0
                         return candidate.expectedTravelTime + tollPenalty + highwayPenalty
                     }
                     return preferenceScore(lhs) < preferenceScore(rhs)
