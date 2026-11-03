@@ -43,6 +43,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     @Published var avoidHighways: Bool = UserDefaults.standard.bool(forKey: "MiniMap.avoidHighways") { didSet { UserDefaults.standard.set(avoidHighways, forKey: "MiniMap.avoidHighways") } }
     @Published private(set) var results: [MKMapItem] = []
     @Published private(set) var savedDestinations: [SavedDestination] = (try? JSONDecoder().decode([SavedDestination].self, from: UserDefaults.standard.data(forKey: "MiniMap.savedDestinations") ?? Data())) ?? []
+    @Published private(set) var recentDestinations: [SavedDestination] = (try? JSONDecoder().decode([SavedDestination].self, from: UserDefaults.standard.data(forKey: "MiniMap.recentDestinations") ?? Data())) ?? []
     @Published private(set) var localReports: [LocalRoadReport] = (try? JSONDecoder().decode([LocalRoadReport].self, from: UserDefaults.standard.data(forKey: "MiniMap.localReports") ?? Data())) ?? []
     @Published private(set) var isSearching = false
     @Published private(set) var error: String?
@@ -153,7 +154,38 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
 
     func select(_ item: MKMapItem) {
         destination = item
+        recordRecentDestination(item)
         calculateRoute(to: item)
+    }
+
+    private func recordRecentDestination(_ item: MKMapItem) {
+        guard let name = item.name else { return }
+        let coordinate = item.placemark.coordinate
+        let recent = SavedDestination(
+            name: name,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            address: item.placemark.title ?? ""
+        )
+        recentDestinations.removeAll {
+            $0.name == recent.name &&
+            abs($0.latitude - recent.latitude) < 0.00001 &&
+            abs($0.longitude - recent.longitude) < 0.00001
+        }
+        recentDestinations.insert(recent, at: 0)
+        recentDestinations = Array(recentDestinations.prefix(20))
+        persistRecentDestinations()
+    }
+
+    func clearRecentDestinations() {
+        recentDestinations = []
+        UserDefaults.standard.removeObject(forKey: "MiniMap.recentDestinations")
+    }
+
+    private func persistRecentDestinations() {
+        if let data = try? JSONEncoder().encode(recentDestinations) {
+            UserDefaults.standard.set(data, forKey: "MiniMap.recentDestinations")
+        }
     }
 
     func saveCurrentDestination() {
@@ -352,9 +384,9 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         nextInstruction = step.instructions
         nextManeuverDistance = distanceToManeuver(from: location.coordinate, step: step)
         let remainingSteps = steps.dropFirst(nextIndex)
-        let distanceToCurrentManeuver = distance(from: location.coordinate, to: step)
+        let distanceOnCurrentStep = remainingDistance(on: step, from: location.coordinate)
         let laterStepDistance = remainingSteps.dropFirst().reduce(0) { $0 + $1.distance }
-        remainingDistance = distanceToCurrentManeuver + laterStepDistance
+        remainingDistance = distanceOnCurrentStep + laterStepDistance
         remainingTime = route.distance > 0
             ? min(route.expectedTravelTime, remainingDistance * route.expectedTravelTime / route.distance)
             : 0
@@ -377,6 +409,35 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         let end = step.polyline.points()[step.polyline.pointCount - 1].coordinate
         return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
             .distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude))
+    }
+
+    private func remainingDistance(on step: MKRoute.Step, from coordinate: CLLocationCoordinate2D) -> CLLocationDistance {
+        guard step.polyline.pointCount > 1 else { return distance(from: coordinate, to: step) }
+        let points = step.polyline.points()
+        let userPoint = MKMapPoint(coordinate)
+        var nearestDistance = Double.greatestFiniteMagnitude
+        var remaining = step.distance
+        for index in 0..<(step.polyline.pointCount - 1) {
+            let a = points[index]
+            let b = points[index + 1]
+            let dx = b.x - a.x
+            let dy = b.y - a.y
+            let lengthSquared = dx * dx + dy * dy
+            let t = lengthSquared == 0 ? 0 : max(0, min(1, ((userPoint.x - a.x) * dx + (userPoint.y - a.y) * dy) / lengthSquared))
+            let projected = MKMapPoint(x: a.x + t * dx, y: a.y + t * dy)
+            let gap = userPoint.distance(to: projected)
+            if gap < nearestDistance {
+                nearestDistance = gap
+                let segmentMeters = a.distance(to: b) * MKMetersPerMapPointAtLatitude(coordinate.latitude)
+                let fractionAfterProjection = 1 - t
+                let laterSegments = index + 1..<(step.polyline.pointCount - 1)
+                let laterMeters = laterSegments.reduce(0.0) { total, segmentIndex in
+                    total + points[segmentIndex].distance(to: points[segmentIndex + 1]) * MKMetersPerMapPointAtLatitude(coordinate.latitude)
+                }
+                remaining = segmentMeters * fractionAfterProjection + laterMeters
+            }
+        }
+        return max(0, remaining)
     }
 
     private func distanceFromRoute(_ coordinate: CLLocationCoordinate2D, _ line: MKPolyline) -> CLLocationDistance {
