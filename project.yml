@@ -5,10 +5,17 @@ options:
     iOS: "16.0"
   createIntermediateGroups: true
   developmentLanguage: en
+packages:
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    from: 6.31.0
 targets:
   MiniMap:
     type: application
     platform: iOS
+    dependencies:
+      - package: MapLibre
+        product: MapLibre
     sources:
       - path: OpenRoadDrive
     info:
