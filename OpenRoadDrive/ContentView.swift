@@ -365,6 +365,7 @@ struct MiniMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ map: MLNMapView, context: Context) {
+        context.coordinator.routeColor = UIColor(session.theme.accent)
         if context.coordinator.lastTheme != session.theme {
             context.coordinator.lastTheme = session.theme
             map.styleURL = session.theme.styleURL
@@ -392,13 +393,14 @@ struct MiniMapView: UIViewRepresentable {
 
         let reportIDs = session.localReports.map(\.id)
         if context.coordinator.reportIDs != reportIDs {
-            let oldReports = map.annotations.filter { ($0.title ?? "").hasPrefix("REPORT:") }
-            map.removeAnnotations(oldReports)
+            map.removeAnnotations(context.coordinator.reportAnnotations)
+            context.coordinator.reportAnnotations = []
             for report in session.localReports {
                 let pin = MLNPointAnnotation()
                 pin.coordinate = report.coordinate
                 pin.title = "REPORT: \(report.kind)"
                 pin.subtitle = "Private on this device · \(report.createdAt.formatted(date: .omitted, time: .shortened))"
+                context.coordinator.reportAnnotations.append(pin)
                 map.addAnnotation(pin)
             }
             context.coordinator.reportIDs = reportIDs
@@ -416,11 +418,13 @@ struct MiniMapView: UIViewRepresentable {
         var routeAnnotation: MLNPolyline?
         var lastTheme: MapTheme?
         var reportIDs: [UUID] = []
+        var reportAnnotations: [MLNPointAnnotation] = []
+        var routeColor: UIColor = .systemBlue
 
         init(_ parent: MiniMapView) { self.parent = parent }
 
         func mapView(_ mapView: MLNMapView, strokeColorForShapeAnnotation annotation: MLNShape) -> UIColor {
-            annotation is MLNPolyline ? UIColor(parent.session.theme.accent) : .systemOrange
+            annotation is MLNPolyline ? routeColor : .systemOrange
         }
 
         func mapView(_ mapView: MLNMapView, lineWidthForPolylineAnnotation annotation: MLNPolyline) -> CGFloat {
@@ -429,7 +433,7 @@ struct MiniMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
             guard !(annotation is MLNUserLocation),
-                  (annotation.title ?? "").hasPrefix("REPORT:") else { return nil }
+                  annotation is MLNPointAnnotation else { return nil }
             let identifier = "MiniMapRoadReport"
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
                 ?? MLNAnnotationView(reuseIdentifier: identifier)
