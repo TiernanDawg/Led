@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import MapLibre
 
 struct ContentView: View {
     @StateObject private var nav = NavigationSession()
@@ -333,64 +334,68 @@ enum MapTheme: String, CaseIterable, Identifiable {
         case .valley: Color(red: 0.94, green: 0.72, blue: 0.43)
         }
     }
-    var mapType: MKMapType {
+    var styleURL: URL {
+        let name: String
         switch self {
-        case .losAngeles: .hybrid
-        case .gotham: .mutedStandard
-        case .voxel: .satellite
-        case .valley: .standard
+        case .losAngeles: name = "liberty"
+        case .gotham: name = "dark"
+        case .voxel: name = "bright"
+        case .valley: name = "positron"
         }
+        return URL(string: "https://tiles.openfreemap.org/styles/\(name)")!
     }
 }
 
 struct MiniMapView: UIViewRepresentable {
     @ObservedObject var session: NavigationSession
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
-    func makeUIView(context: Context) -> MKMapView {
-        let map = MKMapView()
+
+    func makeUIView(context: Context) -> MLNMapView {
+        let map = MLNMapView(frame: .zero, styleURL: session.theme.styleURL)
         map.delegate = context.coordinator
         map.showsUserLocation = true
         map.userTrackingMode = .follow
-        map.isPitchEnabled = true
-        map.isRotateEnabled = true
-        map.camera.pitch = 58
-        map.camera.altitude = 1100
-        map.showsCompass = true
+        map.compassView.isHidden = false
         map.showsScale = true
+        map.showsLogoView = true
+        map.showsAttributionButton = true
+        map.zoomLevel = 14
         return map
     }
-    func updateUIView(_ map: MKMapView, context: Context) {
-        map.mapType = session.theme.mapType
-        if let route = session.route, context.coordinator.routeID != ObjectIdentifier(route) {
-            map.removeOverlays(map.overlays)
-            map.addOverlay(route.polyline)
-            context.coordinator.routeID = ObjectIdentifier(route)
-            map.setVisibleMapRect(route.polyline.boundingMapRect, edgePadding: UIEdgeInsets(top: 165, left: 45, bottom: 250, right: 45), animated: true)
-        } else if session.route == nil && context.coordinator.routeID != nil {
-            map.removeOverlays(map.overlays)
-            context.coordinator.routeID = nil
-        }
+
+    func updateUIView(_ map: MLNMapView, context: Context) {
         if context.coordinator.lastTheme != session.theme {
             context.coordinator.lastTheme = session.theme
-            map.camera.pitch = session.theme == .voxel ? 68 : 58
-            if let route = session.route {
-                map.removeOverlay(route.polyline)
-                map.addOverlay(route.polyline)
+            map.styleURL = session.theme.styleURL
+        }
+
+        if let route = session.route, context.coordinator.routeID != ObjectIdentifier(route) {
+            if let old = context.coordinator.routeAnnotation { map.removeAnnotation(old) }
+            var coordinates = (0..<route.polyline.pointCount).map { route.polyline.points()[$0].coordinate }
+            if !coordinates.isEmpty {
+                let line = MLNPolyline(coordinates: &coordinates, count: UInt(coordinates.count))
+                context.coordinator.routeAnnotation = line
+                map.addAnnotation(line)
+                context.coordinator.routeID = ObjectIdentifier(route)
+                if coordinates.count > 1 {
+                    map.setVisibleCoordinates(&coordinates, count: UInt(coordinates.count),
+                        edgePadding: UIEdgeInsets(top: 165, left: 45, bottom: 250, right: 45),
+                        animated: true)
+                }
             }
+        } else if session.route == nil, let old = context.coordinator.routeAnnotation {
+            map.removeAnnotation(old)
+            context.coordinator.routeAnnotation = nil
+            context.coordinator.routeID = nil
         }
-        if let center = session.pendingCenter {
-            map.setCenter(center, animated: true)
-            map.camera.pitch = 58
-            map.camera.altitude = 1100
-            session.pendingCenter = nil
-        }
+
         let reportIDs = session.localReports.map(\.id)
         if context.coordinator.reportIDs != reportIDs {
-            let oldReports = map.annotations.compactMap { $0 as? MKPointAnnotation }
-                .filter { ($0.title ?? "").hasPrefix("REPORT:") }
+            let oldReports = map.annotations.filter { ($0.title ?? "").hasPrefix("REPORT:") }
             map.removeAnnotations(oldReports)
             for report in session.localReports {
-                let pin = MKPointAnnotation()
+                let pin = MLNPointAnnotation()
                 pin.coordinate = report.coordinate
                 pin.title = "REPORT: \(report.kind)"
                 pin.subtitle = "Private on this device · \(report.createdAt.formatted(date: .omitted, time: .shortened))"
@@ -398,34 +403,40 @@ struct MiniMapView: UIViewRepresentable {
             }
             context.coordinator.reportIDs = reportIDs
         }
+
+        if let center = session.pendingCenter {
+            map.setCenter(center, zoomLevel: 15, animated: true)
+            session.pendingCenter = nil
+        }
     }
-    final class Coordinator: NSObject, MKMapViewDelegate {
+
+    final class Coordinator: NSObject, MLNMapViewDelegate {
         var parent: MiniMapView
         var routeID: ObjectIdentifier?
+        var routeAnnotation: MLNPolyline?
         var lastTheme: MapTheme?
         var reportIDs: [UUID] = []
+
         init(_ parent: MiniMapView) { self.parent = parent }
-        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            guard !(annotation is MKUserLocation),
-                  (annotation.title ?? nil)?.hasPrefix("REPORT:") == true else { return nil }
-            let identifier = "MiniMapRoadReport"
-            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
-                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
-            view.annotation = annotation
-            view.markerTintColor = .systemOrange
-            view.glyphImage = UIImage(systemName: "exclamationmark.triangle.fill")
-            view.canShowCallout = true
-            return view
+
+        func mapView(_ mapView: MLNMapView, strokeColorForShapeAnnotation annotation: MLNShape) -> UIColor {
+            annotation is MLNPolyline ? UIColor(parent.session.theme.accent) : .systemOrange
         }
 
-        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
-            let renderer = MKPolylineRenderer(polyline: line)
-            renderer.strokeColor = UIColor(parent.session.theme.accent)
-            renderer.lineWidth = 7
-            renderer.lineCap = .round
-            renderer.lineJoin = .round
-            return renderer
+        func mapView(_ mapView: MLNMapView, lineWidthForPolylineAnnotation annotation: MLNPolyline) -> CGFloat {
+            7
+        }
+
+        func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
+            guard !(annotation is MLNUserLocation),
+                  (annotation.title ?? "").hasPrefix("REPORT:") else { return nil }
+            let identifier = "MiniMapRoadReport"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                ?? MLNAnnotationView(reuseIdentifier: identifier)
+            view.backgroundColor = .systemOrange
+            view.layer.cornerRadius = 12
+            view.frame = CGRect(x: 0, y: 0, width: 26, height: 26)
+            return view
         }
     }
 }
