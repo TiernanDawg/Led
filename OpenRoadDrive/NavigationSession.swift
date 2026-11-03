@@ -110,6 +110,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         activeSearchID = searchID
         isSearching = true
         error = nil
+        results = []
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = text
         if let currentLocation {
@@ -154,6 +155,13 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
 
     func selectSavedDestination(_ saved: SavedDestination) {
         select(saved.mapItem)
+    }
+
+    func removeSavedDestination(_ saved: SavedDestination) {
+        savedDestinations.removeAll { $0.id == saved.id }
+        if let data = try? JSONEncoder().encode(savedDestinations) {
+            UserDefaults.standard.set(data, forKey: "MiniMap.savedDestinations")
+        }
     }
 
     private func calculateRoute(to item: MKMapItem, preservingNavigation: Bool = false) {
