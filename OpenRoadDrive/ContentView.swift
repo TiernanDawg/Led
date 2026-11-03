@@ -168,6 +168,14 @@ struct ContentView: View {
             Spacer()
             Text(String(format: "%.1f MI", route.distance / 1609.344))
                 .font(.system(size: 11, weight: .black).monospacedDigit())
+            Button { nav.saveCurrentDestination() } label: {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 34, height: 34)
+                    .background(nav.theme.accent, in: Circle())
+                    .foregroundStyle(.black)
+            }
+            .accessibilityLabel("Save destination")
         }
         .foregroundStyle(.white).padding(13)
         .background(.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 16))
