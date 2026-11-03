@@ -196,6 +196,20 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 if nav.isSearching { ProgressView("Searching…") }
                 if let error = nav.error { Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center) }
+                if !nav.savedNames.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("SAVED DESTINATIONS").font(.caption.bold()).foregroundStyle(.secondary)
+                        ForEach(nav.savedNames, id: \.self) { name in
+                            Button {
+                                query = name
+                                nav.search(name)
+                            } label: {
+                                Label(name, systemImage: "bookmark.fill")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                }
                 List(nav.results, id: \.self) { item in
                     Button {
                         nav.select(item)
