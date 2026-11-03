@@ -11,6 +11,12 @@ targets:
     platform: iOS
     sources:
       - path: OpenRoadDrive
+    info:
+      properties:
+        UIBackgroundModes:
+          - audio
+          - location
+        NSLocationAlwaysAndWhenInUseUsageDescription: "MiniMap uses location during active navigation so turn-by-turn guidance can continue when your screen is locked."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tiernan.minimap
