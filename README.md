@@ -14,7 +14,9 @@ MiniMap is a native iOS GPS navigation app with a game-inspired map experience. 
 - Background location/audio configuration for navigation and spoken guidance, subject to iOS authorization and real-device validation.
 - Private local road-condition reports (accident, hazard, construction, stopped vehicle, police sighting) shown as map pins and stored on-device for up to 24 hours; reports are not uploaded or shared.
 - Four visual presets: Sunset City, Gotham, Voxel, and Pixel Valley.
-- Locally persisted saved destinations with names, addresses, and exact coordinates; saved places can be selected directly without searching again or removed from the list.
+- Locally persisted saved destinations and the 20 most recent destinations, with clear-history and individual saved-place removal controls.
+- Remaining-distance estimates that follow the current route-step geometry rather than only measuring straight-line distance to a step endpoint.
+- Proximity-triggered spoken warnings for previously saved local road reports while navigation is active; reports expire after 24 hours and warnings are explicitly labeled as local/private.
 - Automated unsigned IPA packaging and ZIP validation through GitHub Actions.
 
 ## Map theme status
@@ -26,7 +28,7 @@ MapLibre now renders real OpenStreetMap-based vector tiles from OpenFreeMap. The
 - Local incident reports are private to this device. There is no crowdsourced hazard network, police-report network, community traffic, or guaranteed live traffic feed.
 - No downloadable offline map packs or offline routing.
 - Background location/audio modes are configured, but persistent navigation behavior still requires Always location permission and real-device validation; iOS may restrict background execution.
-- Recent-destination history, CarPlay, and destination sharing are not yet implemented.
+- CarPlay, destination sharing, cloud synchronization, and multi-user/community reporting are not yet implemented.
 - Search results are cleared between queries to prevent stale destinations from being selected.\n- A successful CI build verifies compilation and IPA packaging; it does not replace on-device testing.
 
 ## Build an unsigned IPA
@@ -44,4 +46,4 @@ The IPA is unsigned and must be signed for installation.
 - Swift / MapKit system frameworks
 
 ## Attribution
-Map content, place search, and routing are provided by Apple MapKit. Apple's data terms and attribution apply.
+MapLibre Native renders OpenFreeMap vector styles based on OpenStreetMap data. OpenStreetMap data is available under the Open Database License (ODbL) and requires attribution. Search and driving directions currently use Apple MapKit services and remain subject to Apple terms. Open-Meteo provides elevation data for the separate 3D driving scene.
