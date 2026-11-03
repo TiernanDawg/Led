@@ -4,6 +4,20 @@ import MapKit
 import Combine
 import AVFoundation
 
+struct SavedDestination: Identifiable, Codable, Equatable {
+    var id: String { name + "|" + String(latitude) + "|" + String(longitude) }
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    let address: String
+
+    var mapItem: MKMapItem {
+        let item = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)))
+        item.name = name
+        return item
+    }
+}
+
 @MainActor
 final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var theme: MapTheme = MapTheme(rawValue: UserDefaults.standard.string(forKey: "MiniMap.theme") ?? "") ?? .losAngeles {
@@ -12,7 +26,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     @Published private(set) var status = "GPS NAVIGATION"
     @Published private(set) var route: MKRoute?
     @Published private(set) var results: [MKMapItem] = []
-    @Published private(set) var savedNames: [String] = UserDefaults.standard.stringArray(forKey: "MiniMap.savedNames") ?? []
+    @Published private(set) var savedDestinations: [SavedDestination] = (try? JSONDecoder().decode([SavedDestination].self, from: UserDefaults.standard.data(forKey: "MiniMap.savedDestinations") ?? Data())) ?? []
     @Published private(set) var isSearching = false
     @Published private(set) var error: String?
     @Published var pendingCenter: CLLocationCoordinate2D?
@@ -31,7 +45,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     private var destination: MKMapItem?
     private var lastSpokenStep = -1
     private var lastRerouteTime = Date.distantPast
-    private var searchTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?\n    private var activeSearchID = UUID()
     private var directionsTask: Task<Void, Never>?
 
     override init() {
@@ -91,6 +105,8 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         searchTask?.cancel()
+        let searchID = UUID()
+        activeSearchID = searchID
         isSearching = true
         error = nil
         let request = MKLocalSearch.Request()
@@ -99,14 +115,16 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
             request.region = MKCoordinateRegion(center: currentLocation.coordinate, latitudinalMeters: 50000, longitudinalMeters: 50000)
         }
         searchTask = Task {
-            defer { isSearching = false }
+            defer {
+                if activeSearchID == searchID { isSearching = false }
+            }
             do {
                 let response = try await MKLocalSearch(request: request).start()
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, activeSearchID == searchID else { return }
                 results = response.mapItems
                 if results.isEmpty { error = "No matching places found." }
             } catch {
-                if !Task.isCancelled { self.error = error.localizedDescription }
+                if !Task.isCancelled, activeSearchID == searchID { self.error = error.localizedDescription }
             }
         }
     }
@@ -117,10 +135,24 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func saveCurrentDestination() {
-        guard let name = destination?.name, !savedNames.contains(name) else { return }
-        savedNames.insert(name, at: 0)
-        savedNames = Array(savedNames.prefix(20))
-        UserDefaults.standard.set(savedNames, forKey: "MiniMap.savedNames")
+        guard let destination, let name = destination.name else { return }
+        let coordinate = destination.placemark.coordinate
+        let saved = SavedDestination(
+            name: name,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            address: destination.placemark.title ?? ""
+        )
+        savedDestinations.removeAll { $0.name == saved.name && $0.latitude == saved.latitude && $0.longitude == saved.longitude }
+        savedDestinations.insert(saved, at: 0)
+        savedDestinations = Array(savedDestinations.prefix(30))
+        if let data = try? JSONEncoder().encode(savedDestinations) {
+            UserDefaults.standard.set(data, forKey: "MiniMap.savedDestinations")
+        }
+    }
+
+    func selectSavedDestination(_ saved: SavedDestination) {
+        select(saved.mapItem)
     }
 
     private func calculateRoute(to item: MKMapItem, preservingNavigation: Bool = false) {
@@ -271,7 +303,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         speech.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        utterance.voice = AVSpeechSynthesisVoice(language: Locale.current.identifier)
+        let language = Locale.current.identifier.replacingOccurrences(of: "_", with: "-")\n        utterance.voice = AVSpeechSynthesisVoice(language: language) ?? AVSpeechSynthesisVoice(language: "en-US")
         speech.speak(utterance)
     }
 }
