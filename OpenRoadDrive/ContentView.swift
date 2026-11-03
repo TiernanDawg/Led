@@ -158,24 +158,47 @@ struct ContentView: View {
     }
 
     private func routePreview(_ route: MKRoute) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill").font(.title2)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Route ready").font(.system(size: 12, weight: .black))
-                Text("\(route.name.isEmpty ? "Recommended driving route" : route.name) · \(route.steps.count) steps")
-                    .font(.system(size: 10, weight: .medium)).lineLimit(1)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill").font(.title2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Route ready").font(.system(size: 12, weight: .black))
+                    Text("\(route.name.isEmpty ? "Recommended driving route" : route.name) · \(route.steps.count) steps")
+                        .font(.system(size: 10, weight: .medium)).lineLimit(1)
+                }
+                Spacer()
+                Text(String(format: "%.1f MI", route.distance / 1609.344))
+                    .font(.system(size: 11, weight: .black).monospacedDigit())
+                Button { nav.saveCurrentDestination() } label: {
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 34, height: 34)
+                        .background(nav.theme.accent, in: Circle())
+                        .foregroundStyle(.black)
+                }
+                .accessibilityLabel("Save destination")
             }
-            Spacer()
-            Text(String(format: "%.1f MI", route.distance / 1609.344))
-                .font(.system(size: 11, weight: .black).monospacedDigit())
-            Button { nav.saveCurrentDestination() } label: {
-                Image(systemName: "bookmark.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 34, height: 34)
-                    .background(nav.theme.accent, in: Circle())
-                    .foregroundStyle(.black)
+            if nav.routeOptions.count > 1 {
+                Text("ALTERNATIVE ROUTES").font(.system(size: 8, weight: .black)).tracking(1).foregroundStyle(.white.opacity(0.65))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        ForEach(Array(nav.routeOptions.enumerated()), id: \.offset) { index, option in
+                            Button { nav.selectRoute(index) } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(index == 0 ? "FASTEST" : "OPTION \(index + 1)")
+                                        .font(.system(size: 8, weight: .black))
+                                    Text("\(Int(option.expectedTravelTime / 60)) min · \(String(format: "%.1f", option.distance / 1609.344)) mi")
+                                        .font(.system(size: 10, weight: .bold).monospacedDigit())
+                                }
+                                .foregroundStyle(nav.selectedRouteIndex == index ? .black : .white)
+                                .padding(.horizontal, 11).padding(.vertical, 8)
+                                .background(nav.selectedRouteIndex == index ? nav.theme.accent : .white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
-            .accessibilityLabel("Save destination")
         }
         .foregroundStyle(.white).padding(13)
         .background(.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 16))
@@ -194,6 +217,20 @@ struct ContentView: View {
                     Text("Search").fontWeight(.bold).frame(maxWidth: .infinity).padding(12)
                 }
                 .buttonStyle(.borderedProminent)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("ROUTE PREFERENCES").font(.caption.bold()).foregroundStyle(.secondary)
+                    Toggle("Avoid toll roads", isOn: Binding(
+                        get: { nav.avoidTolls },
+                        set: { nav.updateRoutePreferences(avoidTolls: $0, avoidHighways: nav.avoidHighways) }
+                    ))
+                    Toggle("Avoid highways", isOn: Binding(
+                        get: { nav.avoidHighways },
+                        set: { nav.updateRoutePreferences(avoidTolls: nav.avoidTolls, avoidHighways: $0) }
+                    ))
+                }
+                .font(.subheadline)
+                .padding(12)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                 if nav.isSearching { ProgressView("Searching…") }
                 if let error = nav.error { Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center) }
                 if !nav.savedDestinations.isEmpty {
