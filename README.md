@@ -10,7 +10,8 @@ MiniMap is a native iOS GPS navigation app with a game-inspired map experience. 
 - Spoken maneuver guidance using iOS text-to-speech.
 - Live maneuver progression, route distance/time estimates, and off-route recalculation.
 - Navigation start, pause, resume, and end controls.
-- Four visual presets: Sunset City, Gotham, Voxel, and Pixel Valley.\n- Locally persisted saved destinations with names, addresses, and exact coordinates; saved places can be selected directly without searching again.
+- Four visual presets: Sunset City, Gotham, Voxel, and Pixel Valley.
+- Locally persisted saved destinations with names, addresses, and exact coordinates; saved places can be selected directly without searching again or removed from the list.
 - Automated unsigned IPA packaging and ZIP validation through GitHub Actions.
 
 ## Map theme status
@@ -23,7 +24,7 @@ The current presets change Apple MapKit presentation modes, camera pitch, route 
 - No downloadable offline map packs or offline routing.
 - Background navigation behavior and persistent location operation have not yet been implemented or validated.
 - Recent-destination history, CarPlay, and destination sharing are not yet implemented.
-- A successful CI build verifies compilation and IPA packaging; it does not replace on-device testing.
+- Search results are cleared between queries to prevent stale destinations from being selected.\n- A successful CI build verifies compilation and IPA packaging; it does not replace on-device testing.
 
 ## Build an unsigned IPA
 1. Open the Actions tab.
