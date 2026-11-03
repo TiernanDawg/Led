@@ -192,8 +192,8 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
                     return
                 }
                 routeOptions = response.routes.sorted { $0.expectedTravelTime < $1.expectedTravelTime }
-                selectedRouteIndex = routeOptions.firstIndex(where: { $0 === best }) ?? 0
-                route = routeOptions[selectedRouteIndex]
+                selectedRouteIndex = 0
+                route = routeOptions[0]
                 currentStepIndex = 0
                 totalSteps = best.steps.filter { !$0.instructions.isEmpty }.count
                 remainingDistance = best.distance
