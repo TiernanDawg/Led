@@ -4,6 +4,18 @@ import MapKit
 import Combine
 import AVFoundation
 
+struct LocalRoadReport: Identifiable, Codable, Equatable {
+    let id: UUID
+    let kind: String
+    let latitude: Double
+    let longitude: Double
+    let createdAt: Date
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
 struct SavedDestination: Identifiable, Codable, Equatable {
     var id: String { name + "|" + String(latitude) + "|" + String(longitude) }
     let name: String
@@ -31,6 +43,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     @Published var avoidHighways: Bool = UserDefaults.standard.bool(forKey: "MiniMap.avoidHighways") { didSet { UserDefaults.standard.set(avoidHighways, forKey: "MiniMap.avoidHighways") } }
     @Published private(set) var results: [MKMapItem] = []
     @Published private(set) var savedDestinations: [SavedDestination] = (try? JSONDecoder().decode([SavedDestination].self, from: UserDefaults.standard.data(forKey: "MiniMap.savedDestinations") ?? Data())) ?? []
+    @Published private(set) var localReports: [LocalRoadReport] = (try? JSONDecoder().decode([LocalRoadReport].self, from: UserDefaults.standard.data(forKey: "MiniMap.localReports") ?? Data())) ?? []
     @Published private(set) var isSearching = false
     @Published private(set) var error: String?
     @Published var pendingCenter: CLLocationCoordinate2D?
@@ -169,6 +182,33 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         if let data = try? JSONEncoder().encode(savedDestinations) {
             UserDefaults.standard.set(data, forKey: "MiniMap.savedDestinations")
         }
+    }
+
+    func reportRoadCondition(_ kind: String) {
+        guard let coordinate = currentLocation?.coordinate else {
+            error = "Waiting for GPS before adding a road report."
+            return
+        }
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        localReports = localReports.filter { $0.createdAt > cutoff }
+        let report = LocalRoadReport(
+            id: UUID(),
+            kind: kind,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            createdAt: Date()
+        )
+        localReports.insert(report, at: 0)
+        localReports = Array(localReports.prefix(100))
+        if let data = try? JSONEncoder().encode(localReports) {
+            UserDefaults.standard.set(data, forKey: "MiniMap.localReports")
+        }
+        status = "LOCAL REPORT SAVED · NOT SHARED"
+    }
+
+    func clearLocalReports() {
+        localReports = []
+        UserDefaults.standard.removeObject(forKey: "MiniMap.localReports")
     }
 
     private func calculateRoute(to item: MKMapItem, preservingNavigation: Bool = false) {
