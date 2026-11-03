@@ -322,6 +322,10 @@ struct MiniMapView: UIViewRepresentable {
         if context.coordinator.lastTheme != session.theme {
             context.coordinator.lastTheme = session.theme
             map.camera.pitch = session.theme == .voxel ? 68 : 58
+            if let route = session.route {
+                map.removeOverlay(route.polyline)
+                map.addOverlay(route.polyline)
+            }
         }
         if let center = session.pendingCenter {
             map.setCenter(center, animated: true)
