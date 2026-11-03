@@ -6,10 +6,13 @@ MiniMap is a native iOS GPS navigation app with a game-inspired map experience. 
 - Native Apple MapKit map with 3D camera pitch, rotation, compass, scale, and user-location display.
 - GPS permission handling, location accuracy filtering, speed display, and recentering.
 - Place and address search using Apple MapKit local search.
-- Driving route calculation and route preview using Apple MapKit Directions.
+- Driving route calculation, alternate-route comparison, and route preview using Apple MapKit Directions.
+- Best-effort route preference ranking for toll/highway avoidance using route names and maneuver text; this is heuristic and cannot guarantee avoidance.
 - Spoken maneuver guidance using iOS text-to-speech.
 - Live maneuver progression, route distance/time estimates, and off-route recalculation.
 - Navigation start, pause, resume, and end controls.
+- Background location/audio configuration for navigation and spoken guidance, subject to iOS authorization and real-device validation.
+- Private local road-condition reports (accident, hazard, construction, stopped vehicle, police sighting) shown as map pins and stored on-device for up to 24 hours; reports are not uploaded or shared.
 - Four visual presets: Sunset City, Gotham, Voxel, and Pixel Valley.
 - Locally persisted saved destinations with names, addresses, and exact coordinates; saved places can be selected directly without searching again or removed from the list.
 - Automated unsigned IPA packaging and ZIP validation through GitHub Actions.
@@ -20,9 +23,9 @@ The current presets change Apple MapKit presentation modes, camera pitch, route 
 ## Navigation and service limitations
 - Route guidance is based on Apple MapKit Directions and its available maneuver instructions.
 - Off-route detection and rerouting are implemented, but have not yet been field-tested across real drives and poor-GPS conditions.
-- No crowdsourced hazard reports, police reports, community traffic, or guaranteed live traffic feed.
+- Local incident reports are private to this device. There is no crowdsourced hazard network, police-report network, community traffic, or guaranteed live traffic feed.
 - No downloadable offline map packs or offline routing.
-- Background navigation behavior and persistent location operation have not yet been implemented or validated.
+- Background location/audio modes are configured, but persistent navigation behavior still requires Always location permission and real-device validation; iOS may restrict background execution.
 - Recent-destination history, CarPlay, and destination sharing are not yet implemented.
 - Search results are cleared between queries to prevent stale destinations from being selected.\n- A successful CI build verifies compilation and IPA packaging; it does not replace on-device testing.
 
