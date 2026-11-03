@@ -384,21 +384,26 @@ struct MiniMapView: UIViewRepresentable {
             map.camera.altitude = 1100
             session.pendingCenter = nil
         }
-        let oldReports = map.annotations.compactMap { $0 as? MKPointAnnotation }
-            .filter { ($0.title ?? "").hasPrefix("REPORT:") }
-        map.removeAnnotations(oldReports)
-        for report in session.localReports {
-            let pin = MKPointAnnotation()
-            pin.coordinate = report.coordinate
-            pin.title = "REPORT: \(report.kind)"
-            pin.subtitle = "Private on this device · \(report.createdAt.formatted(date: .omitted, time: .shortened))"
-            map.addAnnotation(pin)
+        let reportIDs = session.localReports.map(\.id)
+        if context.coordinator.reportIDs != reportIDs {
+            let oldReports = map.annotations.compactMap { $0 as? MKPointAnnotation }
+                .filter { ($0.title ?? "").hasPrefix("REPORT:") }
+            map.removeAnnotations(oldReports)
+            for report in session.localReports {
+                let pin = MKPointAnnotation()
+                pin.coordinate = report.coordinate
+                pin.title = "REPORT: \(report.kind)"
+                pin.subtitle = "Private on this device · \(report.createdAt.formatted(date: .omitted, time: .shortened))"
+                map.addAnnotation(pin)
+            }
+            context.coordinator.reportIDs = reportIDs
         }
     }
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MiniMapView
         var routeID: ObjectIdentifier?
         var lastTheme: MapTheme?
+        var reportIDs: [UUID] = []
         init(_ parent: MiniMapView) { self.parent = parent }
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard !(annotation is MKUserLocation),
