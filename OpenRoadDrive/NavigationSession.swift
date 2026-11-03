@@ -10,6 +10,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     @Published private(set) var status = "GPS NAVIGATION"
     @Published private(set) var route: MKRoute?
     @Published private(set) var results: [MKMapItem] = []
+    @Published private(set) var savedNames: [String] = UserDefaults.standard.stringArray(forKey: "MiniMap.savedNames") ?? []
     @Published private(set) var isSearching = false
     @Published private(set) var error: String?
     @Published var pendingCenter: CLLocationCoordinate2D?
@@ -111,6 +112,13 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     func select(_ item: MKMapItem) {
         destination = item
         calculateRoute(to: item)
+    }
+
+    func saveCurrentDestination() {
+        guard let name = destination?.name, !savedNames.contains(name) else { return }
+        savedNames.insert(name, at: 0)
+        savedNames = Array(savedNames.prefix(20))
+        UserDefaults.standard.set(savedNames, forKey: "MiniMap.savedNames")
     }
 
     private func calculateRoute(to item: MKMapItem, preservingNavigation: Bool = false) {
