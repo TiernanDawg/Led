@@ -182,8 +182,6 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         request.destination = item
         request.transportType = .automobile
         request.requestsAlternateRoutes = true
-        request.tollRoads = avoidTolls
-        request.highway = avoidHighways
         directionsTask = Task {
             do {
                 let response = try await MKDirections(request: request).calculate()
@@ -191,7 +189,15 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
                     if !Task.isCancelled { error = "No driving route was found." }
                     return
                 }
-                routeOptions = response.routes.sorted { $0.expectedTravelTime < $1.expectedTravelTime }
+                routeOptions = response.routes.sorted { lhs, rhs in
+                    func preferenceScore(_ candidate: MKRoute) -> Double {
+                        let text = ([candidate.name] + candidate.steps.map(\.instructions)).joined(separator: " ").lowercased()
+                        let tollPenalty = avoidTolls && text.contains("toll") ? 1_800.0 : 0
+                        let highwayPenalty = avoidHighways && (text.contains("highway") || text.contains("interstate") || text.contains("motorway")) ? 900.0 : 0
+                        return candidate.expectedTravelTime + tollPenalty + highwayPenalty
+                    }
+                    return preferenceScore(lhs) < preferenceScore(rhs)
+                }
                 selectedRouteIndex = 0
                 route = routeOptions[0]
                 currentStepIndex = 0
