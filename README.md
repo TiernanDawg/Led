@@ -2,20 +2,28 @@
 
 MiniMap is a native iOS GPS navigation app with a game-inspired map experience. It replaces the former OpenRoadDrive prototype while retaining this repository and its GitHub Actions IPA build.
 
-## Current implementation
-- Native Apple MapKit map with 3D pitch, rotation, and user-location display.
-- GPS permission handling and current-location recentering.
-- Place/address search using Apple MapKit local search.
-- Driving route calculation, route preview, distance, and estimated travel time using Apple MapKit Directions.
+## Implemented
+- Native Apple MapKit map with 3D camera pitch, rotation, compass, scale, and user-location display.
+- GPS permission handling, location accuracy filtering, speed display, and recentering.
+- Place and address search using Apple MapKit local search.
+- Driving route calculation and route preview using Apple MapKit Directions.
+- Spoken maneuver guidance using iOS text-to-speech.
+- Live maneuver progression, route distance/time estimates, and off-route recalculation.
+- Navigation start, pause, resume, and end controls.
 - Four visual presets: Sunset City, Gotham, Voxel, and Pixel Valley.
-- Geographic positions and route data remain real-world accurate.
-- Unsigned IPA packaging and validation through GitHub Actions.
+- Automated unsigned IPA packaging and ZIP validation through GitHub Actions.
 
-## Theme status
-The first implementation uses distinct native map presentation modes, camera pitch, route styling, and theme-specific interface treatments. It does not yet reproduce fully custom voxel or pixel-art 3D map rendering. Those require a dedicated custom renderer and remain a later milestone.
+## Map theme status
+The current presets change Apple MapKit presentation modes, camera pitch, route color, and interface styling. They are **not yet fully custom game-style 3D worlds**. True voxel geometry, pixel-art terrain, and bespoke building/road rendering require a custom vector-map renderer and dedicated style assets. Geographic positions and routing remain real-world data.
 
-## Navigation and traffic limitations
-This build calculates routes and previews them. It is not yet a complete turn-by-turn voice navigation system and does not include Waze-style crowdsourced reports or guaranteed live traffic. Apple Maps data availability and route estimates are provided by MapKit.
+## Navigation and service limitations
+- Route guidance is based on Apple MapKit Directions and its available maneuver instructions.
+- Off-route detection and rerouting are implemented, but have not yet been field-tested across real drives and poor-GPS conditions.
+- No crowdsourced hazard reports, police reports, community traffic, or guaranteed live traffic feed.
+- No downloadable offline map packs or offline routing.
+- Background navigation behavior and persistent location operation have not yet been implemented or validated.
+- Saved places, recent destinations, CarPlay, and destination sharing are not yet implemented.
+- A successful CI build verifies compilation and IPA packaging; it does not replace on-device testing.
 
 ## Build an unsigned IPA
 1. Open the Actions tab.
@@ -32,4 +40,4 @@ The IPA is unsigned and must be signed for installation.
 - Swift / MapKit system frameworks
 
 ## Attribution
-Map content, place search, and routing are provided by Apple MapKit. Their data terms and attribution apply.
+Map content, place search, and routing are provided by Apple MapKit. Apple's data terms and attribution apply.
