@@ -25,6 +25,10 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     }
     @Published private(set) var status = "GPS NAVIGATION"
     @Published private(set) var route: MKRoute?
+    @Published private(set) var routeOptions: [MKRoute] = []
+    @Published private(set) var selectedRouteIndex = 0
+    @Published var avoidTolls: Bool = UserDefaults.standard.bool(forKey: "MiniMap.avoidTolls") { didSet { UserDefaults.standard.set(avoidTolls, forKey: "MiniMap.avoidTolls") } }
+    @Published var avoidHighways: Bool = UserDefaults.standard.bool(forKey: "MiniMap.avoidHighways") { didSet { UserDefaults.standard.set(avoidHighways, forKey: "MiniMap.avoidHighways") } }
     @Published private(set) var results: [MKMapItem] = []
     @Published private(set) var savedDestinations: [SavedDestination] = (try? JSONDecoder().decode([SavedDestination].self, from: UserDefaults.standard.data(forKey: "MiniMap.savedDestinations") ?? Data())) ?? []
     @Published private(set) var isSearching = false
@@ -56,6 +60,8 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         locationManager.distanceFilter = 5
         locationManager.activityType = .automotiveNavigation
         locationManager.pausesLocationUpdatesAutomatically = false
+        locationManager.allowsBackgroundLocationUpdates = true
+        locationManager.showsBackgroundLocationIndicator = true
     }
 
     func start() {
@@ -175,6 +181,8 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         request.destination = item
         request.transportType = .automobile
         request.requestsAlternateRoutes = true
+        request.tollRoads = avoidTolls
+        request.highway = avoidHighways
         directionsTask = Task {
             do {
                 let response = try await MKDirections(request: request).calculate()
@@ -182,7 +190,9 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
                     if !Task.isCancelled { error = "No driving route was found." }
                     return
                 }
-                route = best
+                routeOptions = response.routes.sorted { $0.expectedTravelTime < $1.expectedTravelTime }
+                selectedRouteIndex = routeOptions.firstIndex(where: { $0 === best }) ?? 0
+                route = routeOptions[selectedRouteIndex]
                 currentStepIndex = 0
                 totalSteps = best.steps.filter { !$0.instructions.isEmpty }.count
                 remainingDistance = best.distance
@@ -207,8 +217,34 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         }
     }
 
+    func selectRoute(_ index: Int) {
+        guard routeOptions.indices.contains(index), !isNavigating else { return }
+        selectedRouteIndex = index
+        route = routeOptions[index]
+        currentStepIndex = 0
+        totalSteps = route?.steps.filter { !$0.instructions.isEmpty }.count ?? 0
+        remainingDistance = route?.distance ?? 0
+        remainingTime = route?.expectedTravelTime ?? 0
+        if let route, let source = currentLocation {
+            nextInstruction = route.steps.first(where: { !$0.instructions.isEmpty })?.instructions ?? "Continue to your destination"
+            nextManeuverDistance = route.steps.first(where: { !$0.instructions.isEmpty }).map { distanceToManeuver(from: source.coordinate, step: $0) } ?? route.distance
+            pendingCenter = source.coordinate
+        }
+        status = "ROUTE READY · \(Int(remainingTime / 60)) MIN"
+    }
+
+    func updateRoutePreferences(avoidTolls: Bool, avoidHighways: Bool) {
+        let changed = self.avoidTolls != avoidTolls || self.avoidHighways != avoidHighways
+        self.avoidTolls = avoidTolls
+        self.avoidHighways = avoidHighways
+        if changed, let destination, !isNavigating { calculateRoute(to: destination) }
+    }
+
     func beginNavigation() {
         guard route != nil else { return }
+        if locationManager.authorizationStatus == .authorizedWhenInUse {
+            locationManager.requestAlwaysAuthorization()
+        }
         isNavigating = true
         locationManager.startUpdatingLocation()
         status = "NAVIGATION ACTIVE"
@@ -226,6 +262,8 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     func clearRoute() {
         pauseNavigation()
         route = nil
+        routeOptions = []
+        selectedRouteIndex = 0
         destination = nil
         totalSteps = 0
         currentStepIndex = 0
