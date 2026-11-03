@@ -204,11 +204,21 @@ struct ContentView: View {
                                 nav.selectSavedDestination(saved)
                                 showingSearch = false
                             } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Label(saved.name, systemImage: "bookmark.fill")
-                                    if !saved.address.isEmpty {
-                                        Text(saved.address).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                HStack(spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Label(saved.name, systemImage: "bookmark.fill")
+                                        if !saved.address.isEmpty {
+                                            Text(saved.address).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                        }
                                     }
+                                    Spacer(minLength: 4)
+                                    Button(role: .destructive) {
+                                        nav.removeSavedDestination(saved)
+                                    } label: {
+                                        Image(systemName: "trash").font(.caption).foregroundStyle(.red)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel("Remove saved destination")
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
