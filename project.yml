@@ -12,6 +12,7 @@ targets:
     sources:
       - path: OpenRoadDrive
     info:
+      path: MiniMap-Info.plist
       properties:
         UIBackgroundModes:
           - audio
