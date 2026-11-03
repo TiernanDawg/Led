@@ -6,7 +6,9 @@ import AVFoundation
 
 @MainActor
 final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published var theme: MapTheme = .losAngeles
+    @Published var theme: MapTheme = MapTheme(rawValue: UserDefaults.standard.string(forKey: "MiniMap.theme") ?? "") ?? .losAngeles {
+        didSet { UserDefaults.standard.set(theme.rawValue, forKey: "MiniMap.theme") }
+    }
     @Published private(set) var status = "GPS NAVIGATION"
     @Published private(set) var route: MKRoute?
     @Published private(set) var results: [MKMapItem] = []
@@ -145,7 +147,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
                 remainingDistance = best.distance
                 remainingTime = best.expectedTravelTime
                 nextInstruction = best.steps.first(where: { !$0.instructions.isEmpty })?.instructions ?? "Continue to your destination"
-                nextManeuverDistance = best.steps.first(where: { !$0.instructions.isEmpty }).map { distance(from: source.coordinate, to: $0) } ?? best.distance
+                nextManeuverDistance = best.steps.first(where: { !$0.instructions.isEmpty }).map { distanceToManeuver(from: source.coordinate, step: $0) } ?? best.distance
                 lastSpokenStep = -1
                 if preservingNavigation {
                     isNavigating = true
@@ -218,7 +220,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         }
         let step = steps[nextIndex]
         nextInstruction = step.instructions
-        nextManeuverDistance = distance(from: location.coordinate, to: step)
+        nextManeuverDistance = distanceToManeuver(from: location.coordinate, step: step)
         let remainingSteps = steps.dropFirst(nextIndex)
         let distanceToCurrentManeuver = distance(from: location.coordinate, to: step)
         let laterStepDistance = remainingSteps.dropFirst().reduce(0) { $0 + $1.distance }
@@ -231,6 +233,13 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
             clearRoute()
             status = "ARRIVED"
         }
+    }
+
+    private func distanceToManeuver(from coordinate: CLLocationCoordinate2D, step: MKRoute.Step) -> CLLocationDistance {
+        guard step.polyline.pointCount > 0 else { return .greatestFiniteMagnitude }
+        let start = step.polyline.points()[0].coordinate
+        return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            .distance(from: CLLocation(latitude: start.latitude, longitude: start.longitude))
     }
 
     private func distance(from coordinate: CLLocationCoordinate2D, to step: MKRoute.Step) -> CLLocationDistance {
