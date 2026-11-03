@@ -45,6 +45,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     @Published private(set) var savedDestinations: [SavedDestination] = (try? JSONDecoder().decode([SavedDestination].self, from: UserDefaults.standard.data(forKey: "MiniMap.savedDestinations") ?? Data())) ?? []
     @Published private(set) var recentDestinations: [SavedDestination] = (try? JSONDecoder().decode([SavedDestination].self, from: UserDefaults.standard.data(forKey: "MiniMap.recentDestinations") ?? Data())) ?? []
     @Published private(set) var localReports: [LocalRoadReport] = (try? JSONDecoder().decode([LocalRoadReport].self, from: UserDefaults.standard.data(forKey: "MiniMap.localReports") ?? Data())) ?? []
+    @Published private(set) var nearbyReportAlert: String?
     @Published private(set) var isSearching = false
     @Published private(set) var error: String?
     @Published var pendingCenter: CLLocationCoordinate2D?
@@ -63,6 +64,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     private var destination: MKMapItem?
     private var lastSpokenStep = -1
     private var lastRerouteTime = Date.distantPast
+    private var announcedReportIDs: Set<UUID> = []
     private var searchTask: Task<Void, Never>?
     private var activeSearchID = UUID()
     private var directionsTask: Task<Void, Never>?
@@ -80,6 +82,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func start() {
+        pruneExpiredReports()
         locationManager.requestWhenInUseAuthorization()
         locationManager.startUpdatingLocation()
         status = "WAITING FOR GPS"
@@ -107,6 +110,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         if pendingCenter == nil { pendingCenter = location.coordinate }
         if !isNavigating { status = "GPS · ACCURACY ±\(Int(location.horizontalAccuracy))M" }
         updateNavigation(at: location)
+        checkNearbyReports(at: location)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -221,8 +225,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
             error = "Waiting for GPS before adding a road report."
             return
         }
-        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
-        localReports = localReports.filter { $0.createdAt > cutoff }
+        pruneExpiredReports()
         let report = LocalRoadReport(
             id: UUID(),
             kind: kind,
@@ -240,7 +243,34 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
 
     func clearLocalReports() {
         localReports = []
+        announcedReportIDs.removeAll()
+        nearbyReportAlert = nil
         UserDefaults.standard.removeObject(forKey: "MiniMap.localReports")
+    }
+
+    private func pruneExpiredReports() {
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        let valid = localReports.filter { $0.createdAt > cutoff }
+        guard valid.count != localReports.count else { return }
+        localReports = valid
+        let validIDs = Set(valid.map(\.id))
+        announcedReportIDs.formIntersection(validIDs)
+        if let data = try? JSONEncoder().encode(localReports) {
+            UserDefaults.standard.set(data, forKey: "MiniMap.localReports")
+        }
+    }
+
+    private func checkNearbyReports(at location: CLLocation) {
+        guard isNavigating else { return }
+        for report in localReports where !announcedReportIDs.contains(report.id) {
+            let reportLocation = CLLocation(latitude: report.latitude, longitude: report.longitude)
+            let distance = location.distance(from: reportLocation)
+            guard distance > 70, distance < 500 else { continue }
+            announcedReportIDs.insert(report.id)
+            nearbyReportAlert = "\(report.kind.uppercased()) REPORTED · \(Int(distance)) M AWAY · LOCAL REPORT"
+            speak("Caution. A locally saved \(report.kind) report is nearby.")
+            break
+        }
     }
 
     private func calculateRoute(to item: MKMapItem, preservingNavigation: Bool = false) {
