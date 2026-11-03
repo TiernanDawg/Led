@@ -155,7 +155,7 @@ struct ContentView: View {
             if nav.isNavigating {
                 Button { nav.pauseNavigation() } label: { actionLabel("PAUSE", color: .orange) }
             } else if nav.route != nil {
-                Button { nav.beginNavigation() } label: { actionLabel("START", color: nav.theme.accent) }
+                Button { nav.beginNavigation() } label: { actionLabel(nav.status == "ROUTE PAUSED" ? "RESUME" : "START", color: nav.theme.accent) }
                 Button { nav.clearRoute() } label: { actionLabel("END", color: .red) }
             } else {
                 Button { showingSearch = true } label: { actionLabel("SEARCH", color: nav.theme.accent) }
@@ -248,6 +248,36 @@ struct ContentView: View {
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                 if nav.isSearching { ProgressView("Searching…") }
                 if let error = nav.error { Text(error).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center) }
+                if !nav.recentDestinations.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("RECENT DESTINATIONS").font(.caption.bold()).foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Clear") { nav.clearRecentDestinations() }
+                                .font(.caption)
+                        }
+                        ForEach(nav.recentDestinations) { recent in
+                            Button {
+                                nav.selectSavedDestination(recent)
+                                showingSearch = false
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(recent.name).foregroundStyle(.primary)
+                                        if !recent.address.isEmpty {
+                                            Text(recent.address).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.up.left").font(.caption).foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
                 if !nav.savedDestinations.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("SAVED DESTINATIONS").font(.caption.bold()).foregroundStyle(.secondary)
