@@ -45,7 +45,8 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     private var destination: MKMapItem?
     private var lastSpokenStep = -1
     private var lastRerouteTime = Date.distantPast
-    private var searchTask: Task<Void, Never>?\n    private var activeSearchID = UUID()
+    private var searchTask: Task<Void, Never>?
+    private var activeSearchID = UUID()
     private var directionsTask: Task<Void, Never>?
 
     override init() {
@@ -303,7 +304,8 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         speech.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        let language = Locale.current.identifier.replacingOccurrences(of: "_", with: "-")\n        utterance.voice = AVSpeechSynthesisVoice(language: language) ?? AVSpeechSynthesisVoice(language: "en-US")
+        let language = Locale.current.identifier.replacingOccurrences(of: "_", with: "-")
+        utterance.voice = AVSpeechSynthesisVoice(language: language) ?? AVSpeechSynthesisVoice(language: "en-US")
         speech.speak(utterance)
     }
 }
