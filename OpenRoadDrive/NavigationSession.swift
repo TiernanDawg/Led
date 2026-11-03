@@ -64,7 +64,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last, location.horizontalAccuracy >= 0, location.horizontalAccuracy < 100 else { return }
         currentLocation = location
-        currentSpeed = max(0, location.speed)
+        currentSpeed = location.speed >= 0 ? max(0, location.speed) : -1
         if pendingCenter == nil { pendingCenter = location.coordinate }
         if !isNavigating { status = "GPS · ACCURACY ±\(Int(location.horizontalAccuracy))M" }
         updateNavigation(at: location)
@@ -113,7 +113,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         calculateRoute(to: item)
     }
 
-    private func calculateRoute(to item: MKMapItem) {
+    private func calculateRoute(to item: MKMapItem, preservingNavigation: Bool = false) {
         guard let source = currentLocation else {
             error = "Waiting for a reliable GPS position."
             return
@@ -139,8 +139,16 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
                 nextInstruction = best.steps.first(where: { !$0.instructions.isEmpty })?.instructions ?? "Continue to your destination"
                 nextManeuverDistance = best.steps.first(where: { !$0.instructions.isEmpty }).map { distance(from: source.coordinate, to: $0) } ?? best.distance
                 lastSpokenStep = -1
-                isNavigating = false
-                status = "ROUTE READY · \(Int(best.expectedTravelTime / 60)) MIN"
+                if preservingNavigation {
+                    isNavigating = true
+                    status = "NAVIGATION ACTIVE · ROUTE UPDATED"
+                    lastSpokenStep = -1
+                    speak(nextInstruction)
+                    lastSpokenStep = currentStepIndex
+                } else {
+                    isNavigating = false
+                    status = "ROUTE READY · \(Int(best.expectedTravelTime / 60)) MIN"
+                }
                 pendingCenter = source.coordinate
             } catch {
                 if !Task.isCancelled { self.error = error.localizedDescription }
@@ -184,7 +192,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
            Date().timeIntervalSince(lastRerouteTime) > 15 {
             lastRerouteTime = Date()
             status = "REROUTING…"
-            calculateRoute(to: destination)
+            calculateRoute(to: destination, preservingNavigation: true)
             return
         }
 
@@ -204,8 +212,12 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         nextInstruction = step.instructions
         nextManeuverDistance = distance(from: location.coordinate, to: step)
         let remainingSteps = steps.dropFirst(nextIndex)
-        remainingDistance = remainingSteps.reduce(0) { $0 + $1.distance }
-        remainingTime = route.distance > 0 ? remainingDistance * route.expectedTravelTime / route.distance : 0
+        let distanceToCurrentManeuver = distance(from: location.coordinate, to: step)
+        let laterStepDistance = remainingSteps.dropFirst().reduce(0) { $0 + $1.distance }
+        remainingDistance = distanceToCurrentManeuver + laterStepDistance
+        remainingTime = route.distance > 0
+            ? min(route.expectedTravelTime, remainingDistance * route.expectedTravelTime / route.distance)
+            : 0
         if location.distance(from: CLLocation(latitude: destination.placemark.coordinate.latitude, longitude: destination.placemark.coordinate.longitude)) < 35 {
             speak("You have arrived at your destination.")
             clearRoute()
