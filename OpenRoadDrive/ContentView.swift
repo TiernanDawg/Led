@@ -70,6 +70,20 @@ struct ContentView: View {
                     Text(nav.nextInstruction.uppercased()).font(.system(size: 11, weight: .bold)).lineLimit(2)
                 }
                 Spacer(minLength: 0)
+                Menu {
+                    Button("Accident") { nav.reportRoadCondition("Accident") }
+                    Button("Road hazard") { nav.reportRoadCondition("Road hazard") }
+                    Button("Construction") { nav.reportRoadCondition("Construction") }
+                    Button("Stopped vehicle") { nav.reportRoadCondition("Stopped vehicle") }
+                    Button("Police sighting") { nav.reportRoadCondition("Police sighting") }
+                } label: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 16, weight: .black))
+                        .frame(width: 40, height: 40)
+                        .background(.orange, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.black)
+                }
+                .accessibilityLabel("Report road condition")
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -370,12 +384,35 @@ struct MiniMapView: UIViewRepresentable {
             map.camera.altitude = 1100
             session.pendingCenter = nil
         }
+        let oldReports = map.annotations.compactMap { $0 as? MKPointAnnotation }
+            .filter { ($0.title ?? "").hasPrefix("REPORT:") }
+        map.removeAnnotations(oldReports)
+        for report in session.localReports {
+            let pin = MKPointAnnotation()
+            pin.coordinate = report.coordinate
+            pin.title = "REPORT: \(report.kind)"
+            pin.subtitle = "Private on this device · \(report.createdAt.formatted(date: .omitted, time: .shortened))"
+            map.addAnnotation(pin)
+        }
     }
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MiniMapView
         var routeID: ObjectIdentifier?
         var lastTheme: MapTheme?
         init(_ parent: MiniMapView) { self.parent = parent }
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard !(annotation is MKUserLocation),
+                  (annotation.title ?? nil)?.hasPrefix("REPORT:") == true else { return nil }
+            let identifier = "MiniMapRoadReport"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            view.annotation = annotation
+            view.markerTintColor = .systemOrange
+            view.glyphImage = UIImage(systemName: "exclamationmark.triangle.fill")
+            view.canShowCallout = true
+            return view
+        }
+
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKPolylineRenderer(polyline: line)
