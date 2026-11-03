@@ -3,7 +3,7 @@
 MiniMap is a native iOS GPS navigation app with a game-inspired map experience. It replaces the former OpenRoadDrive prototype while retaining this repository and its GitHub Actions IPA build.
 
 ## Implemented
-- Native Apple MapKit map with 3D camera pitch, rotation, compass, scale, and user-location display.
+- Native MapLibre vector map renderer using OpenFreeMap/OpenStreetMap tiles, with user-location display, compass, scale, and vector styling.
 - GPS permission handling, location accuracy filtering, speed display, and recentering.
 - Place and address search using Apple MapKit local search.
 - Driving route calculation, alternate-route comparison, and route preview using Apple MapKit Directions.
@@ -18,7 +18,7 @@ MiniMap is a native iOS GPS navigation app with a game-inspired map experience. 
 - Automated unsigned IPA packaging and ZIP validation through GitHub Actions.
 
 ## Map theme status
-The current presets change Apple MapKit presentation modes, camera pitch, route color, and interface styling. They are **not yet fully custom game-style 3D worlds**. True voxel geometry, pixel-art terrain, and bespoke building/road rendering require a custom vector-map renderer and dedicated style assets. Geographic positions and routing remain real-world data.
+MapLibre now renders real OpenStreetMap-based vector tiles from OpenFreeMap. The four presets currently select different real vector styles: Liberty (Sunset City), Dark (Gotham), Bright (Voxel), and Positron (Pixel Valley). These are meaningful cartographic style changes, but they are **not yet bespoke GTA/Gotham/voxel/pixel-art worlds**. True voxel geometry, pixel-art terrain, custom landmarks, and advanced 3D building treatments still require dedicated style assets and rendering work. Geographic positions and routing remain real-world data.
 
 ## Navigation and service limitations
 - Route guidance is based on Apple MapKit Directions and its available maneuver instructions.
