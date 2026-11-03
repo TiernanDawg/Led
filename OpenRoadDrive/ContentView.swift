@@ -86,6 +86,15 @@ struct ContentView: View {
                 }
                 .accessibilityLabel("Report road condition")
             }
+            if let alert = nav.nearbyReportAlert {
+                Label(alert, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.orange, in: RoundedRectangle(cornerRadius: 10))
+            }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.18))
