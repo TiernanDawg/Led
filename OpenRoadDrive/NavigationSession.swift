@@ -62,6 +62,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
         locationManager.pausesLocationUpdatesAutomatically = false
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.showsBackgroundLocationIndicator = true
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
     }
 
     func start() {
@@ -246,8 +247,9 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
             locationManager.requestAlwaysAuthorization()
         }
         isNavigating = true
+        try? AVAudioSession.sharedInstance().setActive(true)
         locationManager.startUpdatingLocation()
-        status = "NAVIGATION ACTIVE"
+        status = "NAVIGATION ACTIVE · BACKGROUND READY"
         lastSpokenStep = -1
         speak(nextInstruction)
         lastSpokenStep = currentStepIndex
@@ -256,6 +258,7 @@ final class NavigationSession: NSObject, ObservableObject, CLLocationManagerDele
     func pauseNavigation() {
         isNavigating = false
         speech.stopSpeaking(at: .immediate)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         status = route == nil ? "GPS NAVIGATION" : "ROUTE PAUSED"
     }
 
